@@ -1,3 +1,80 @@
 ---
-title: "Home"
+title: "Ethan Saline"
 ---
+
+[LinkedIn](https://www.linkedin.com/in/ethan-saline)
+
+---
+
+## Education
+
+**Brigham Young University Idaho — B.S. in Data Science, Minor in Statistics**  
+*April 2023 - December 2026*  
+
+**GPA:** 3.98  
+
+**Relevant Coursework:** Machine Learning, Data Analysis, Statistical Modeling, Time Series Analysis, Data Visualization  
+
+Engaged in projects applying **Python, R, and SQL** to solve real-world data problems, including predictive modeling and advanced statistical analysis.
+
+---
+
+## Certificates
+
+**Stanford University Online** 
+
+- Supervised Learning Algorithms  
+- Unsupervised Learning Algorithms  
+- Advanced Learning Models  
+- Machine Learning Specialization  
+
+**Brigham Young University Idaho**  
+
+- Machine Learning Certificate  
+
+---
+
+## Experience
+
+#### Brigham Young University Idaho, Rexburg
+
+**Data Science Lab Manager**  
+*April 2025 - Present*  
+
+- Designed and implemented data collection and analysis systems to support research and student projects.  
+- Mentored students of BYUI in machine learning, programming, and statistical methods, enhancing student skill development.
+
+**Math Tutor & Supervisor**  
+*August 2024 - Present*  
+
+- Tutored students across 18 different courses, significantly improving comprehension and academic performance.  
+- Supervised a team of peer tutors, ensuring consistent quality instruction and student support.
+
+**Data Science Programming Teaching Assistant**  
+*April 2025 - December 2026*  
+
+- Assisted instruction for one in-person and two online Data Science Programming courses, supporting over 60 students.  
+- Provided guidance on **Python, R, and SQL**, debugging, and data wrangling/visualization techniques.  
+- Held tutoring hours, graded assignments, and delivered individualized feedback to improve student performance and confidence in programming.
+
+---
+
+## Skills
+
+- **Statistical Data Analysis**  
+- **Time Series Analysis**  
+- **Programming:** R, Python, SQL  
+- **Predictive Modeling**  
+- **Data Wrangling & Machine Learning** 
+- **Fluent Portuguese**
+
+---
+
+## Volunteering
+
+**Church Of Jesus Christ of Latter-day Saints, São Paulo, Brazil** — *Missionary*  
+*October 2021 - October 2023*  
+
+- Trained and mentored fellow missionaries, developed leadership, teaching, and cross-cultural communication skills.  
+- Supervised 20% of companionship and district goals as a **Zone Leader** by tracking and reporting progress to mission president.  
+- Managed finances as **Financial Secretary**, by resolving discrepancies and ensuring accurate records.  

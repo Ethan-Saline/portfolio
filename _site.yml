@@ -2,48 +2,38 @@ name: "Ethan Saline Portfolio"
 output_dir: "docs"
 
 navbar:
-  title: "<img src='Images/logo.png' alt='Portfolio Logo' style='height: 30px; margin: -5px 0px;'>"
+  title: "<span style='font-family: Arial Black, Impact, sans-serif;
+                     font-weight: 600;
+                     font-size: 32px;'>
+          Ethan Saline's Portfolio
+        </span>"
+
   left:
-    - text: "Resume"
-      href: resume.html
 
     - text: "Time Series"
       menu:
         - text: "ARIMA Explanation"
           href: timeseries-arima.html
-        - text: "New Project (TBD)"
-          href: timeseries-new.html
 
     - text: "Bioinformatics"
       menu:
         - text: "Cleaned Project"
           href: bioinformatics-clean.html
-        - text: "Bro Saunders Theory (BNK)"
-          href: bioinformatics-bnk.html
 
     - text: "Machine Learning"
       menu:
         - text: "CNN (Cleaned)"
           href: ml-cnn.html
-        - text: "RAG Model from Article"
-          href: ml-rag.html
 
     - text: "Data Science"
       menu:
         - text: "ICE Analysis (Cleaned)"
           href: ds-ice.html
-        - text: "Storytelling Project"
-          href: ds-storytelling.html
 
     - text: "Statistical Analysis"
       menu:
         - text: "Logistic Regression"
           href: stats-logistic.html
-        - text: "Medical Data Project"
-          href: stats-med.html
-
-    - text: "Political Science"
-      href: political-science.html
 
     - text: "Game Theory"
       href: game-theory.html
@@ -55,4 +45,3 @@ output:
     css: styles.css
     include:
       in_header: header.html
-
