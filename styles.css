@@ -1,0 +1,36 @@
+/* Body text */
+body {
+  font-size: 16px;
+}
+
+/* Navbar brand image alignment */
+.navbar-brand img {
+  vertical-align: middle;
+}
+
+/* Headings */
+h1, h2, h3 {
+  font-weight: 600;
+}
+
+/* Optional: wider content */
+.container {
+  max-width: 1100px;
+}
+
+/* Increase navbar height slightly */
+.navbar {
+  min-height: 70px;
+}
+
+/* Resize logo */
+.navbar-brand img {
+  height: 48px;        /* try 40–56px */
+  width: auto;
+}
+
+/* Vertically center logo */
+.navbar-brand {
+  display: flex;
+  align-items: center;
+}
