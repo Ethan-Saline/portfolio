@@ -25,7 +25,7 @@ h1, h2, h3 {
 
 /* Resize logo */
 .navbar-brand img {
-  height: 48px;        /* try 40–56px */
+  height: 68px;        /* try 40–56px */
   width: auto;
 }
 
