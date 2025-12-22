@@ -1,18 +1,58 @@
 name: "Ethan Saline Portfolio"
-navbar:
-  title: "<img src='Images/snlogo.png' alt='Statistics Notebook Logo' style='height: 30px; margin: -5px 0px'>"
-  left:
-    - text: "Example"
-      menu:
-        - text: "Example"
-          href: RCommands.html
-          
-output_dir: '.'
+output_dir: "."
 
-output: 
+navbar:
+  title: "<img src='Images/snlogo.png' alt='Portfolio Logo' style='height: 30px; margin: -5px 0px;'>"
+  left:
+    - text: "Resume"
+      href: resume.html
+
+    - text: "Time Series"
+      menu:
+        - text: "ARIMA Explanation"
+          href: timeseries-arima.html
+        - text: "New Project (TBD)"
+          href: timeseries-new.html
+
+    - text: "Bioinformatics"
+      menu:
+        - text: "Cleaned Project"
+          href: bioinformatics-clean.html
+        - text: "Bro Saunders Theory (BNK)"
+          href: bioinformatics-bnk.html
+
+    - text: "Machine Learning"
+      menu:
+        - text: "CNN (Cleaned)"
+          href: ml-cnn.html
+        - text: "RAG Model from Article"
+          href: ml-rag.html
+
+    - text: "Data Science"
+      menu:
+        - text: "ICE Analysis (Cleaned)"
+          href: ds-ice.html
+        - text: "Storytelling Project"
+          href: ds-storytelling.html
+
+    - text: "Statistical Analysis"
+      menu:
+        - text: "Logistic Regression"
+          href: stats-logistic.html
+        - text: "Medical Data Project"
+          href: stats-med.html
+
+    - text: "Political Science"
+      href: political-science.html
+
+    - text: "Game Theory"
+      href: game-theory.html
+
+output:
   html_document:
     theme: cerulean
-    css: styles.css
     highlight: tango
+    css: styles.css
     include:
-      in-header: /header.html
+      in_header: header.html
+
