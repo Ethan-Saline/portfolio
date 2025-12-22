@@ -2,7 +2,7 @@ name: "Ethan Saline Portfolio"
 output_dir: "docs"
 
 navbar:
-  title: "<img src='Images/snlogo.png' alt='Portfolio Logo' style='height: 30px; margin: -5px 0px;'>"
+  title: "<img src='Images/logo.png' alt='Portfolio Logo' style='height: 30px; margin: -5px 0px;'>"
   left:
     - text: "Resume"
       href: resume.html
