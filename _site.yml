@@ -1,0 +1,18 @@
+name: "Ethan Saline Portfolio"
+navbar:
+  title: "<img src='Images/snlogo.png' alt='Statistics Notebook Logo' style='height: 30px; margin: -5px 0px'>"
+  left:
+    - text: "Example"
+      menu:
+        - text: "Example"
+          href: RCommands.html
+          
+output_dir: '.'
+
+output: 
+  html_document:
+    theme: cerulean
+    css: styles.css
+    highlight: tango
+    include:
+      in-header: /header.html
