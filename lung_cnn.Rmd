@@ -3,12 +3,12 @@ title: "Lung X-Ray Diagnosis using a CNN"
 output: html_document
 ---
 
-```{r, warning=FALSE}
+```{r, warning=FALSE, message=FALSE, results='hide'}
 library(reticulate)
 use_condaenv("r-tf", required = TRUE)
 ```
 
-```{python, message=FALSE, results='hide', warning=FALSE}
+```{python}
 import os
 import tempfile
 import zipfile
@@ -16,6 +16,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import tensorflow as tf
+
 from tensorflow.keras import layers, models
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.utils import class_weight
@@ -23,35 +24,180 @@ from kaggle.api.kaggle_api_extended import KaggleApi
 ```
 
 ```{python}
-# =========================
-# Create temporary directory for dataset
-# =========================
+# -------------------------
+# Parameters
+# -------------------------
+IMG_SIZE = 128
+BATCH_SIZE = 32
+NUM_EPOCHS = 20
+NUM_CLASSES = 4
+SEED = 42
+```
 
+```{python}
+# -------------------------
+# Create temporary directory
+# -------------------------
 tmp_dir = tempfile.TemporaryDirectory()
 ```
 
 ```{python}
-# =========================
-# Download Kaggle dataset into temporary directory
-# =========================
+try:
+    # -------------------------
+    # Download & extract dataset
+    # -------------------------
+    api = KaggleApi()
+    api.authenticate()
 
-api = KaggleApi()
-api.authenticate()
+    dataset_name = "jtiptj/chest-xray-pneumoniacovid19tuberculosis"
+    zip_path = os.path.join(tmp_dir.name, "dataset.zip")
 
-dataset_name = "jtiptj/chest-xray-pneumoniacovid19tuberculosis"
-zip_path = os.path.join(tmp_dir.name, "dataset.zip")
+    api.dataset_download_files(dataset_name, path=tmp_dir.name, unzip=False)
 
-# Download dataset ZIP
-api.dataset_download_files(dataset_name, path=tmp_dir.name, unzip=False)
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        zip_ref.extractall(tmp_dir.name)
 
-# Extract ZIP
-with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-  zip_ref.extractall(tmp_dir.name)
+    DATA_DIR = tmp_dir.name
+    train_dir = os.path.join(DATA_DIR, "train")
+    val_dir   = os.path.join(DATA_DIR, "val")
+    test_dir  = os.path.join(DATA_DIR, "test")
 
-# Set directory paths
-DATA_DIR = tmp_dir.name
-train_dir = os.path.join(DATA_DIR, "train")
-val_dir   = os.path.join(DATA_DIR, "val")
-test_dir  = os.path.join(DATA_DIR, "test")
+    # -------------------------
+    # Load datasets
+    # -------------------------
+    train_dataset = tf.keras.preprocessing.image_dataset_from_directory(
+        train_dir,
+        labels='inferred',
+        label_mode='int',
+        color_mode='rgb',
+        batch_size=BATCH_SIZE,
+        image_size=(IMG_SIZE, IMG_SIZE),
+        shuffle=True,
+        seed=SEED
+    )
+
+    val_dataset = tf.keras.preprocessing.image_dataset_from_directory(
+        val_dir,
+        labels='inferred',
+        label_mode='int',
+        color_mode='rgb',
+        batch_size=BATCH_SIZE,
+        image_size=(IMG_SIZE, IMG_SIZE),
+        shuffle=False
+    )
+
+    test_dataset = tf.keras.preprocessing.image_dataset_from_directory(
+        test_dir,
+        labels='inferred',
+        label_mode='int',
+        color_mode='rgb',
+        batch_size=BATCH_SIZE,
+        image_size=(IMG_SIZE, IMG_SIZE),
+        shuffle=False
+    )
+
+    class_names = test_dataset.class_names
+
+    # -------------------------
+    # Grayscale + normalization
+    # -------------------------
+    normalization_layer = layers.Rescaling(1./255)
+
+    def preprocess(images, labels):
+        images = tf.image.rgb_to_grayscale(images)
+        images = normalization_layer(images)
+        return images, labels
+
+    train_dataset = train_dataset.map(preprocess)
+    val_dataset   = val_dataset.map(preprocess)
+    test_dataset  = test_dataset.map(preprocess)
+
+    # -------------------------
+    # CNN Model
+    # -------------------------
+    model = models.Sequential([
+        layers.Input(shape=(IMG_SIZE, IMG_SIZE, 1)),
+
+        layers.Conv2D(128, 3, activation='gelu'),
+        layers.MaxPooling2D(3),
+
+        layers.Conv2D(64, 3, activation='gelu'),
+        layers.MaxPooling2D(2),
+
+        layers.Conv2D(16, 3, activation='gelu'),
+        layers.BatchNormalization(),
+        layers.MaxPooling2D(3),
+
+        layers.Flatten(),
+        layers.Dropout(0.1),
+        layers.Dense(130, activation='gelu'),
+        layers.Dense(NUM_CLASSES, activation='softmax')
+    ])
+
+    model.compile(
+        optimizer='adam',
+        loss='sparse_categorical_crossentropy',
+        metrics=['accuracy']
+    )
+
+    # -------------------------
+    # Class weights
+    # -------------------------
+    all_labels = []
+    for _, labels in train_dataset:
+        all_labels.extend(labels.numpy())
+
+    class_weights = class_weight.compute_class_weight(
+        class_weight='balanced',
+        classes=np.unique(all_labels),
+        y=all_labels
+    )
+    class_weights_dict = dict(enumerate(class_weights))
+
+    # -------------------------
+    # Train
+    # -------------------------
+    model.fit(
+        train_dataset,
+        validation_data=val_dataset,
+        epochs=NUM_EPOCHS,
+        class_weight=class_weights_dict
+    )
+
+    # -------------------------
+    # Evaluation
+    # -------------------------
+    predictions = model.predict(test_dataset)
+    y_pred = np.argmax(predictions, axis=1)
+    y_true = np.concatenate([y for _, y in test_dataset], axis=0)
+
+    print(f"\nManual accuracy: {accuracy_score(y_true, y_pred):.4f}\n")
+    print(classification_report(y_true, y_pred, target_names=class_names))
+
+    # -------------------------
+    # Confusion matrix
+    # -------------------------
+    cm = confusion_matrix(y_true, y_pred)
+
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt='d',
+        cmap='Blues',
+        xticklabels=class_names,
+        yticklabels=class_names
+    )
+    plt.title("Confusion Matrix")
+    plt.xlabel("Predicted")
+    plt.ylabel("True")
+    plt.tight_layout()
+    plt.show()
+
+finally:
+    # -------------------------
+    # Cleanup temp directory
+    # -------------------------
+    tmp_dir.cleanup()
 ```
 

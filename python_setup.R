@@ -3,16 +3,21 @@ library(reticulate)
 # Install Miniconda if not already installed
 install_miniconda()
 
-# Create conda env
-conda_create("r-tf", packages = c("python=3.10"))
+# Remove broken env if redoing
+conda_remove("r-tf")
 
-# Activate env
+# Create clean env
+conda_create(
+  "r-tf",
+  packages = c("python=3.10")
+)
+
 use_condaenv("r-tf", required = TRUE)
 
 conda_install(
-  envname = "r-tf",
+  "r-tf",
   packages = c(
-    "tensorflow",
+    "tensorflow==2.13.*",
     "numpy",
     "scikit-learn",
     "matplotlib",
@@ -20,5 +25,5 @@ conda_install(
     "pillow",
     "kaggle"
   ),
-  pip = TRUE 
+  pip = TRUE
 )
