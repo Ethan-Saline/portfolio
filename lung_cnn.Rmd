@@ -30,14 +30,20 @@ BATCH_SIZE = 32
 NUM_EPOCHS = 20
 NUM_CLASSES = 4
 SEED = 42
+```
 
+```{python}
 # -------------------------
 # Stage 0: Create temporary directory
 # -------------------------
 tmp_dir = tempfile.TemporaryDirectory()
 DATA_DIR = tmp_dir.name
-print(f"Temporary folder: {DATA_DIR}")
 
+# For debug
+#print(f"Temporary folder: {DATA_DIR}")
+```
+
+```{python}
 # -------------------------
 # Stage 1: Download & extract dataset
 # -------------------------
@@ -49,7 +55,9 @@ api.dataset_download_files(dataset_name, path=DATA_DIR, unzip=True)
 train_dir = os.path.join(DATA_DIR, "train")
 val_dir   = os.path.join(DATA_DIR, "val")
 test_dir  = os.path.join(DATA_DIR, "test")
+```
 
+```{python}
 # -------------------------
 # Stage 2: Load & preprocess datasets
 # -------------------------
@@ -87,7 +95,9 @@ train_dataset = train_dataset.cache()
 val_dataset   = val_dataset.cache()
 test_dataset  = test_dataset.cache()
 class_names = test_dataset.class_names
+```
 
+```{python}
 # -------------------------
 # Stage 3: Build CNN model
 # -------------------------
@@ -114,7 +124,9 @@ def build_model():
     return model
 
 model = build_model()
+```
 
+```{python}
 # -------------------------
 # Stage 4: Compute class weights
 # -------------------------
@@ -125,7 +137,9 @@ class_weights_array = class_weight.compute_class_weight(
     y=all_labels
 )
 class_weights_dict = dict(enumerate(class_weights_array))
+```
 
+```{python}
 # -------------------------
 # Stage 5: Train model (with checkpoint)
 # -------------------------
@@ -141,7 +155,9 @@ model.fit(
     class_weight=class_weights_dict,
     callbacks=[checkpoint_callback]
 )
+```
 
+```{python}
 # -------------------------
 # Stage 6: Evaluation
 # -------------------------
@@ -171,7 +187,9 @@ plt.xlabel("Predicted")
 plt.ylabel("True")
 plt.tight_layout()
 plt.show()
+```
 
+```{python}
 # -------------------------
 # Stage 7: Cleanup temp directory
 # -------------------------
