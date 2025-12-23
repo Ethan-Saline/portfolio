@@ -43,7 +43,7 @@ DATA_DIR = tmp_dir.name
 #print(f"Temporary folder: {DATA_DIR}")
 ```
 
-```{python}
+```{python, warning=FALSE, message=FALSE, results='hide'}
 # -------------------------
 # Stage 1: Download & extract dataset
 # -------------------------
@@ -59,42 +59,52 @@ test_dir  = os.path.join(DATA_DIR, "test")
 
 ```{python}
 # -------------------------
-# Stage 2: Load & preprocess datasets
+# Stage 2: Load & preprocess datasets (fixed)
 # -------------------------
 def preprocess(images, labels):
     images = tf.image.rgb_to_grayscale(images)
     images = layers.Rescaling(1./255)(images)
     return images, labels
 
-def load_datasets():
-    train_ds = tf.keras.preprocessing.image_dataset_from_directory(
-        train_dir, labels='inferred', label_mode='int',
-        color_mode='rgb', batch_size=BATCH_SIZE,
-        image_size=(IMG_SIZE, IMG_SIZE),
-        shuffle=True, seed=SEED
-    ).map(preprocess)
+# Load datasets first
+train_dataset_raw = tf.keras.preprocessing.image_dataset_from_directory(
+    train_dir,
+    labels='inferred',
+    label_mode='int',
+    color_mode='rgb',
+    batch_size=BATCH_SIZE,
+    image_size=(IMG_SIZE, IMG_SIZE),
+    shuffle=True,
+    seed=SEED
+)
 
-    val_ds = tf.keras.preprocessing.image_dataset_from_directory(
-        val_dir, labels='inferred', label_mode='int',
-        color_mode='rgb', batch_size=BATCH_SIZE,
-        image_size=(IMG_SIZE, IMG_SIZE),
-        shuffle=False
-    ).map(preprocess)
+val_dataset_raw = tf.keras.preprocessing.image_dataset_from_directory(
+    val_dir,
+    labels='inferred',
+    label_mode='int',
+    color_mode='rgb',
+    batch_size=BATCH_SIZE,
+    image_size=(IMG_SIZE, IMG_SIZE),
+    shuffle=False
+)
 
-    test_ds = tf.keras.preprocessing.image_dataset_from_directory(
-        test_dir, labels='inferred', label_mode='int',
-        color_mode='rgb', batch_size=BATCH_SIZE,
-        image_size=(IMG_SIZE, IMG_SIZE),
-        shuffle=False
-    ).map(preprocess)
+test_dataset_raw = tf.keras.preprocessing.image_dataset_from_directory(
+    test_dir,
+    labels='inferred',
+    label_mode='int',
+    color_mode='rgb',
+    batch_size=BATCH_SIZE,
+    image_size=(IMG_SIZE, IMG_SIZE),
+    shuffle=False
+)
 
-    return train_ds, val_ds, test_ds
+# Save class names BEFORE any preprocessing or caching
+class_names = train_dataset_raw.class_names
 
-train_dataset, val_dataset, test_dataset = load_datasets()
-train_dataset = train_dataset.cache()
-val_dataset   = val_dataset.cache()
-test_dataset  = test_dataset.cache()
-class_names = test_dataset.class_names
+# Apply preprocessing and caching
+train_dataset = train_dataset_raw.map(preprocess).cache()
+val_dataset   = val_dataset_raw.map(preprocess).cache()
+test_dataset  = test_dataset_raw.map(preprocess).cache()
 ```
 
 ```{python}
