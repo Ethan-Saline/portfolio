@@ -10,33 +10,10 @@ navbar:
 
   left:
 
-    - text: "Time Series"
-      menu:
-        - text: "ARIMA Explanation"
-          href: timeseries-arima.html
-
-    - text: "Bioinformatics"
-      menu:
-        - text: "Cleaned Project"
-          href: bioinformatics-clean.html
-
     - text: "Machine Learning"
       menu:
-        - text: "CNN (Cleaned)"
-          href: ml-cnn.html
-
-    - text: "Data Science"
-      menu:
-        - text: "ICE Analysis (Cleaned)"
-          href: ds-ice.html
-
-    - text: "Statistical Analysis"
-      menu:
-        - text: "Logistic Regression"
-          href: stats-logistic.html
-
-    - text: "Game Theory"
-      href: game-theory.html
+        - text: "Lung X-Ray CNN"
+          href: lung_cnn.html
 
 output:
   html_document:

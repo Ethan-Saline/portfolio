@@ -1,0 +1,57 @@
+---
+title: "Lung X-Ray Diagnosis using a CNN"
+output: html_document
+---
+
+```{r, warning=FALSE}
+library(reticulate)
+use_condaenv("r-tf", required = TRUE)
+```
+
+```{python, message=FALSE, results='hide', warning=FALSE}
+import os
+import tempfile
+import zipfile
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import tensorflow as tf
+from tensorflow.keras import layers, models
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.utils import class_weight
+from kaggle.api.kaggle_api_extended import KaggleApi
+```
+
+```{python}
+# =========================
+# Create temporary directory for dataset
+# =========================
+
+tmp_dir = tempfile.TemporaryDirectory()
+```
+
+```{python}
+# =========================
+# Download Kaggle dataset into temporary directory
+# =========================
+
+api = KaggleApi()
+api.authenticate()
+
+dataset_name = "jtiptj/chest-xray-pneumoniacovid19tuberculosis"
+zip_path = os.path.join(tmp_dir.name, "dataset.zip")
+
+# Download dataset ZIP
+api.dataset_download_files(dataset_name, path=tmp_dir.name, unzip=False)
+
+# Extract ZIP
+with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+  zip_ref.extractall(tmp_dir.name)
+
+# Set directory paths
+DATA_DIR = tmp_dir.name
+train_dir = os.path.join(DATA_DIR, "train")
+val_dir   = os.path.join(DATA_DIR, "val")
+test_dir  = os.path.join(DATA_DIR, "test")
+```
+
