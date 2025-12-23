@@ -11,15 +11,13 @@ use_condaenv("r-tf", required = TRUE)
 ```{python}
 import os
 import tempfile
-import zipfile
+import tensorflow as tf
+from tensorflow.keras import layers, models
+from sklearn.utils import class_weight
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-import tensorflow as tf
-
-from tensorflow.keras import layers, models
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
-from sklearn.utils import class_weight
 from kaggle.api.kaggle_api_extended import KaggleApi
 ```
 
@@ -32,172 +30,151 @@ BATCH_SIZE = 32
 NUM_EPOCHS = 20
 NUM_CLASSES = 4
 SEED = 42
-```
 
-```{python}
 # -------------------------
-# Create temporary directory
+# Stage 0: Create temporary directory
 # -------------------------
 tmp_dir = tempfile.TemporaryDirectory()
-```
+DATA_DIR = tmp_dir.name
+print(f"Temporary folder: {DATA_DIR}")
 
-```{python}
-try:
-    # -------------------------
-    # Download & extract dataset
-    # -------------------------
-    api = KaggleApi()
-    api.authenticate()
+# -------------------------
+# Stage 1: Download & extract dataset
+# -------------------------
+api = KaggleApi()
+api.authenticate()
+dataset_name = "jtiptj/chest-xray-pneumoniacovid19tuberculosis"
+api.dataset_download_files(dataset_name, path=DATA_DIR, unzip=True)
 
-    dataset_name = "jtiptj/chest-xray-pneumoniacovid19tuberculosis"
-    zip_path = os.path.join(tmp_dir.name, "dataset.zip")
+train_dir = os.path.join(DATA_DIR, "train")
+val_dir   = os.path.join(DATA_DIR, "val")
+test_dir  = os.path.join(DATA_DIR, "test")
 
-    api.dataset_download_files(dataset_name, path=tmp_dir.name, unzip=False)
+# -------------------------
+# Stage 2: Load & preprocess datasets
+# -------------------------
+def preprocess(images, labels):
+    images = tf.image.rgb_to_grayscale(images)
+    images = layers.Rescaling(1./255)(images)
+    return images, labels
 
-    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-        zip_ref.extractall(tmp_dir.name)
-
-    DATA_DIR = tmp_dir.name
-    train_dir = os.path.join(DATA_DIR, "train")
-    val_dir   = os.path.join(DATA_DIR, "val")
-    test_dir  = os.path.join(DATA_DIR, "test")
-
-    # -------------------------
-    # Load datasets
-    # -------------------------
-    train_dataset = tf.keras.preprocessing.image_dataset_from_directory(
-        train_dir,
-        labels='inferred',
-        label_mode='int',
-        color_mode='rgb',
-        batch_size=BATCH_SIZE,
+def load_datasets():
+    train_ds = tf.keras.preprocessing.image_dataset_from_directory(
+        train_dir, labels='inferred', label_mode='int',
+        color_mode='rgb', batch_size=BATCH_SIZE,
         image_size=(IMG_SIZE, IMG_SIZE),
-        shuffle=True,
-        seed=SEED
-    )
+        shuffle=True, seed=SEED
+    ).map(preprocess)
 
-    val_dataset = tf.keras.preprocessing.image_dataset_from_directory(
-        val_dir,
-        labels='inferred',
-        label_mode='int',
-        color_mode='rgb',
-        batch_size=BATCH_SIZE,
+    val_ds = tf.keras.preprocessing.image_dataset_from_directory(
+        val_dir, labels='inferred', label_mode='int',
+        color_mode='rgb', batch_size=BATCH_SIZE,
         image_size=(IMG_SIZE, IMG_SIZE),
         shuffle=False
-    )
+    ).map(preprocess)
 
-    test_dataset = tf.keras.preprocessing.image_dataset_from_directory(
-        test_dir,
-        labels='inferred',
-        label_mode='int',
-        color_mode='rgb',
-        batch_size=BATCH_SIZE,
+    test_ds = tf.keras.preprocessing.image_dataset_from_directory(
+        test_dir, labels='inferred', label_mode='int',
+        color_mode='rgb', batch_size=BATCH_SIZE,
         image_size=(IMG_SIZE, IMG_SIZE),
         shuffle=False
-    )
+    ).map(preprocess)
 
-    class_names = test_dataset.class_names
+    return train_ds, val_ds, test_ds
 
-    # -------------------------
-    # Grayscale + normalization
-    # -------------------------
-    normalization_layer = layers.Rescaling(1./255)
+train_dataset, val_dataset, test_dataset = load_datasets()
+train_dataset = train_dataset.cache()
+val_dataset   = val_dataset.cache()
+test_dataset  = test_dataset.cache()
+class_names = test_dataset.class_names
 
-    def preprocess(images, labels):
-        images = tf.image.rgb_to_grayscale(images)
-        images = normalization_layer(images)
-        return images, labels
-
-    train_dataset = train_dataset.map(preprocess)
-    val_dataset   = val_dataset.map(preprocess)
-    test_dataset  = test_dataset.map(preprocess)
-
-    # -------------------------
-    # CNN Model
-    # -------------------------
+# -------------------------
+# Stage 3: Build CNN model
+# -------------------------
+def build_model():
     model = models.Sequential([
         layers.Input(shape=(IMG_SIZE, IMG_SIZE, 1)),
-
         layers.Conv2D(128, 3, activation='gelu'),
         layers.MaxPooling2D(3),
-
         layers.Conv2D(64, 3, activation='gelu'),
         layers.MaxPooling2D(2),
-
         layers.Conv2D(16, 3, activation='gelu'),
         layers.BatchNormalization(),
         layers.MaxPooling2D(3),
-
         layers.Flatten(),
         layers.Dropout(0.1),
         layers.Dense(130, activation='gelu'),
         layers.Dense(NUM_CLASSES, activation='softmax')
     ])
-
     model.compile(
         optimizer='adam',
         loss='sparse_categorical_crossentropy',
         metrics=['accuracy']
     )
+    return model
 
-    # -------------------------
-    # Class weights
-    # -------------------------
-    all_labels = []
-    for _, labels in train_dataset:
-        all_labels.extend(labels.numpy())
+model = build_model()
 
-    class_weights = class_weight.compute_class_weight(
-        class_weight='balanced',
-        classes=np.unique(all_labels),
-        y=all_labels
-    )
-    class_weights_dict = dict(enumerate(class_weights))
+# -------------------------
+# Stage 4: Compute class weights
+# -------------------------
+all_labels = np.concatenate([y for _, y in train_dataset], axis=0)
+class_weights_array = class_weight.compute_class_weight(
+    class_weight='balanced',
+    classes=np.unique(all_labels),
+    y=all_labels
+)
+class_weights_dict = dict(enumerate(class_weights_array))
 
-    # -------------------------
-    # Train
-    # -------------------------
-    model.fit(
-        train_dataset,
-        validation_data=val_dataset,
-        epochs=NUM_EPOCHS,
-        class_weight=class_weights_dict
-    )
+# -------------------------
+# Stage 5: Train model (with checkpoint)
+# -------------------------
+checkpoint_path = os.path.join(DATA_DIR, "cnn_model.h5")
+checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+    checkpoint_path, save_best_only=True
+)
 
-    # -------------------------
-    # Evaluation
-    # -------------------------
-    predictions = model.predict(test_dataset)
-    y_pred = np.argmax(predictions, axis=1)
-    y_true = np.concatenate([y for _, y in test_dataset], axis=0)
+model.fit(
+    train_dataset,
+    validation_data=val_dataset,
+    epochs=NUM_EPOCHS,
+    class_weight=class_weights_dict,
+    callbacks=[checkpoint_callback]
+)
 
-    print(f"\nManual accuracy: {accuracy_score(y_true, y_pred):.4f}\n")
-    print(classification_report(y_true, y_pred, target_names=class_names))
+# -------------------------
+# Stage 6: Evaluation
+# -------------------------
+# Reload best model
+model = tf.keras.models.load_model(checkpoint_path)
 
-    # -------------------------
-    # Confusion matrix
-    # -------------------------
-    cm = confusion_matrix(y_true, y_pred)
+predictions = model.predict(test_dataset)
+y_pred = np.argmax(predictions, axis=1)
+y_true = np.concatenate([y for _, y in test_dataset], axis=0)
 
-    plt.figure(figsize=(8, 6))
-    sns.heatmap(
-        cm,
-        annot=True,
-        fmt='d',
-        cmap='Blues',
-        xticklabels=class_names,
-        yticklabels=class_names
-    )
-    plt.title("Confusion Matrix")
-    plt.xlabel("Predicted")
-    plt.ylabel("True")
-    plt.tight_layout()
-    plt.show()
+print(f"\nManual accuracy: {accuracy_score(y_true, y_pred):.4f}\n")
+print(classification_report(y_true, y_pred, target_names=class_names))
 
-finally:
-    # -------------------------
-    # Cleanup temp directory
-    # -------------------------
-    tmp_dir.cleanup()
+# Confusion matrix
+cm = confusion_matrix(y_true, y_pred)
+plt.figure(figsize=(8, 6))
+sns.heatmap(
+    cm,
+    annot=True,
+    fmt='d',
+    cmap='Blues',
+    xticklabels=class_names,
+    yticklabels=class_names
+)
+plt.title("Confusion Matrix")
+plt.xlabel("Predicted")
+plt.ylabel("True")
+plt.tight_layout()
+plt.show()
+
+# -------------------------
+# Stage 7: Cleanup temp directory
+# -------------------------
+tmp_dir.cleanup()
+
 ```
-

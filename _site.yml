@@ -22,3 +22,5 @@ output:
     css: styles.css
     include:
       in_header: header.html
+      
+# rmarkdown::render_site()
