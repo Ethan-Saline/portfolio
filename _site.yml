@@ -19,7 +19,6 @@ navbar:
       menu:
         - text: "Covid Transcriptomics"
           href: covid.html
-          
     - text: "Storytelling"
       menu:
         - text: "ICE Deportations"
@@ -42,10 +41,6 @@ output:
     self_contained: false
     lib_dir: docs/site_libs
     code_folding: hide
-    
-# Copy proj_files folder to docs directory
+
 resource_files:
   - "proj_files/**"
-  
-# Render the site using the below:
-# rmarkdown::render_site()

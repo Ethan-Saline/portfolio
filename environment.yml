@@ -1,0 +1,13 @@
+name: r-tf
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.11
+  - tensorflow
+  - keras
+  - numpy
+  - scikit-learn
+  - matplotlib
+  - seaborn
+  - kaggle
