@@ -128,7 +128,6 @@ Summary & Reporting
 # CRAN packages
 cran_pkgs <- c(
   "tidyverse",
-  "WGCNA",
   "pheatmap",
   "Rtsne",
   "uwot",
@@ -154,6 +153,7 @@ if (!requireNamespace("BiocManager", quietly = TRUE)) {
 bioc_pkgs <- c(
   "limma",
   "edgeR",
+  "WGCNA",
   "DESeq2"
 )
 
