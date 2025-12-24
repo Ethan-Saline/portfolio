@@ -22,7 +22,7 @@ navbar:
           
     - text: "Storytelling"
       menu:
-        - text: "Covid Transcriptomics"
+        - text: "ICE Deportations"
           href: ICE.html
     - text: "Time Series"
       menu:
@@ -30,7 +30,7 @@ navbar:
           href: flu.html
         - text: "Credit Card Loans Decomposition"
           href: credit_cards.html
-        - text: "Palantir Stock Stocastic Analysis"
+        - text: "Palantir Stock Stochastic Analysis"
           href: palantir.html
 output:
   html_document:
@@ -41,10 +41,11 @@ output:
       in_header: header.html
     self_contained: false
     lib_dir: docs/site_libs
-
+    code_folding: hide
+    
 # Copy proj_files folder to docs directory
 resource_files:
   - "proj_files/**"
-    
+  
 # Render the site using the below:
 # rmarkdown::render_site()
