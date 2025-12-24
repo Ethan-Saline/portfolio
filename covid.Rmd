@@ -124,7 +124,6 @@ Summary & Reporting
 ### Data Loading & Quality Control
 
 #### Package Installation and Loading
-
 ```{r}
 # CRAN packages
 cran_pkgs <- c(
