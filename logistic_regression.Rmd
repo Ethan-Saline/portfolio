@@ -1,0 +1,338 @@
+---
+title: "Heart Failure Mortality Prediction Using Logistic Regression"
+---
+
+```{r, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(readr)
+library(utils)
+library(Applr)
+library(plotly)
+library(RColorBrewer)
+library(pander)
+library(mosaic)
+```
+
+```{r}
+# Altered an Applr function to graph two line logistic models 
+scatter_3d_logistic_two_line <- function(model, n = 50, colors = c("red","blue")) {
+  if (!inherits(model, "glm")) stop("Model must be a glm (logistic) model")
+  
+  vars <- all.vars(formula(model))
+  predictors <- vars[-1]  # exclude outcome
+  y_name <- vars[1]
+  
+  if (length(predictors) > 3) stop("Model has too many predictors. Only 2 continuous + 1 factor allowed")
+  
+  # Detect factor variable among predictors using model$xlevels
+  factor_var <- NULL
+  continuous_vars <- c()
+  for (v in predictors) {
+    if (!is.null(model$xlevels[[v]])) {
+      factor_var <- v
+    } else {
+      continuous_vars <- c(continuous_vars, v)
+    }
+  }
+  
+  if (length(continuous_vars) != 2) stop("Need exactly 2 continuous predictors for 3D plot")
+  x_name <- continuous_vars[1]
+  y2_name <- continuous_vars[2]
+  
+  # Scatter points
+  df_plot <- model$model[, c(y_name, x_name, y2_name)]
+  if (!is.null(factor_var) && factor_var %in% names(model$model)) {
+    df_plot[[factor_var]] <- model$model[[factor_var]]  # keep factor
+    levels_factor <- levels(model$model[[factor_var]])
+    if (is.null(colors)) colors <- brewer.pal(length(levels_factor), "Set1")
+  }
+  
+  # Rename for plotting
+  df_plot2 <- df_plot %>%
+    rename(X = !!sym(x_name), Y = !!sym(y2_name), Z = !!sym(y_name))
+  
+  if (!is.null(factor_var) && factor_var %in% names(df_plot2)) {
+    df_plot2[[factor_var]] <- df_plot[[factor_var]]
+  }
+  
+  axisx <- seq(min(df_plot2$X), max(df_plot2$X), length.out = n)
+  axisy <- seq(min(df_plot2$Y), max(df_plot2$Y), length.out = n)
+  
+  # Scatter points
+  p <- plot_ly(data = df_plot2, x = ~X, y = ~Y, z = ~Z,
+               type = 'scatter3d', mode = 'markers', color = I("black"))
+  
+  # Add surface(s)
+  if (!is.null(factor_var) && factor_var %in% names(df_plot2)) {
+    for (i in seq_along(levels_factor)) {
+      level <- levels_factor[i]
+      
+      # Surface grid with original variable names
+      surface_df <- setNames(expand.grid(axisx, axisy), c(x_name, y2_name))
+      surface_df[[factor_var]] <- factor(level, levels = model$xlevels[[factor_var]])
+      
+      # Predict probabilities
+      surface_df$Z <- predict(model, newdata = surface_df, type = "response")
+      
+      # Convert to matrix for surface
+      Z_matrix <- matrix(surface_df$Z, nrow = length(axisy), ncol = length(axisx), byrow = TRUE)
+      
+      # Add surface with unique color
+      p <- p %>% add_surface(x = axisx, y = axisy, z = Z_matrix,
+                             opacity = 0.6,
+                             showscale = FALSE,
+                             name = paste(factor_var, "=", level),
+                             surfacecolor = matrix(rep(i, length(axisx)*length(axisy)), nrow=length(axisy)),
+                             colorscale = list(c(0,1), c(colors[i], colors[i])))
+    }
+  } else {
+    # Single surface if no factor
+    surface_df <- setNames(expand.grid(axisx, axisy), c(x_name, y2_name))
+    surface_df$Z <- predict(model, newdata = surface_df, type = "response")
+    Z_matrix <- matrix(surface_df$Z, nrow = length(axisy), ncol = length(axisx), byrow = TRUE)
+    
+    p <- p %>% add_surface(x = axisx, y = axisy, z = Z_matrix, opacity = 0.6)
+  }
+  
+  # Axis titles
+  p <- layout(p, scene = list(
+    xaxis = list(title = x_name),
+    yaxis = list(title = y2_name),
+    zaxis = list(title = y_name)
+  ))
+  
+  p
+}
+```
+
+## Executive Summary
+
+We developed a logistic regression model to predict mortality in 299 heart failure patients using ejection fraction, serum creatinine, and age ≥ 80.
+
+The model achieved **80.3% correct classification** at a 0.5 probability threshold.
+
+- **Ejection fraction**: Each 1% increase reduces mortality odds by ~6% (OR = 0.94).
+- **Serum creatinine**: Each 1 mg/dL increase nearly doubles mortality odds (OR = 1.94).
+- **Age ≥ 80**: Increases mortality odds by ~408% (OR = 5.08).
+
+## Introduction
+
+```{r, warning=FALSE, message=FALSE}
+# Save as a temp file
+temp_zip <- tempfile(fileext = ".zip")
+
+url <- "https://archive.ics.uci.edu/static/public/519/heart+failure+clinical+records.zip"
+download.file(url, destfile = temp_zip, mode = "wb", quiet = TRUE)
+
+zip_contents <- unzip(temp_zip, list = TRUE)
+
+temp_csv <- tempfile(fileext = ".csv")
+unzip(temp_zip, files = "heart_failure_clinical_records_dataset.csv", exdir = dirname(temp_csv))
+
+# Read from temp
+df <- read_csv(file.path(dirname(temp_csv), "heart_failure_clinical_records_dataset.csv"))
+```
+
+**Heart failure** is a chronic condition in which the heart cannot pump sufficient blood to meet the body’s metabolic demands, leading to symptoms such as dyspnea, fatigue, and fluid retention. Mortality risk in heart failure is influenced by cardiac dysfunction, end organ damage (particularly renal impairment), and patient characteristics such as age and comorbidities.
+
+**Logistic regression** is a statistical method used to model the probability of a binary outcome, such as death or survival. It estimates how clinical predictors influence the odds of the outcome, making it well suited for mortality risk analysis.
+
+In our logistic regression we use the following:
+
+**Age**
+Heart failure mortality increases markedly with age. Older patients typically have reduced physiological reserve and a higher burden of comorbid conditions, which worsen prognosis.
+
+Key implications:
+
+- Reduced cardiovascular reserve
+- Higher prevalence of hypertension, diabetes, and chronic kidney disease
+- Lower tolerance for aggressive or advanced therapies
+
+**Ejection Fraction**
+
+Ejection fraction represents the percentage of blood ejected from the left ventricle with each contraction. A normal EF is approximately 55–70%
+
+Low EF reflects systolic dysfunction and is strongly associated with:
+
+- Increased hospitalization rates
+- Higher risk of ventricular arrhythmias
+- Elevated mortality risk
+
+**Serum Creatinine**
+
+Serum creatinine reflects kidney function and is a critical prognostic marker in heart failure. In Heatrt Failure patients, elevated creatinine often indicates cardiorenal syndrome, where reduced cardiac output and elevated venous pressures impair renal perfusion and filtration.
+
+Renal dysfunction in heart failure is driven by:
+
+- Low forward flow, reducing renal blood supply
+- Chronic venous congestion, increasing renal interstitial pressure
+- Neurohormonal activation (RAAS and sympathetic systems), worsening both cardiac and renal function
+
+## Data Acquisition
+
+```{r}
+# Create new variable
+df$eighty_years_old <- factor(ifelse(df$age >= 80, 1, 0),
+                          levels = c(0,1),
+                          labels = c("Under80", "80plus"))
+```
+
+
+The data come from the UCI Heart Failure Clinical Records dataset, which contains clinical information from 299 patients with heart failure. The dataset includes demographic variables, comorbidities, laboratory measurements, cardiac function indicators, and a binary outcome indicating mortality during the follow-up period.
+
+*A Quick Note*: The variable that had by far the best predictive power was Time, which was how long the researchers watched the patient. This variable would be "cheating" as patients who died were no longer watched and had a lower number than those who survived and were watched the entire study. We have discarded this variable
+
+## Exploratory Data Analysis (EDA)
+
+### Summary Statitics {.tabset .tabset-pills}
+
+#### Serum Creatinine (mg/dL)
+
+```{r}
+favstats(df$serum_creatinine ~ df$DEATH_EVENT) %>% pander()
+
+ggplot(df, aes(x = serum_creatinine)) +
+  geom_histogram(bins = 30) +
+  labs(
+    title = "Distribution of Serum Creatinine",
+    x = "Serum Creatinine (mg/dL)",
+    y = "Count"
+  )
+
+ggplot(df, aes(x = as.factor(DEATH_EVENT), y = serum_creatinine)) +
+  geom_boxplot() +
+  labs(
+    title = "Serum Creatinine by Mortality Outcome",
+    x = "Death Event (0 = Alive, 1 = Died)",
+    y = "Serum Creatinine (mg/dL)"
+  )
+```
+
+#### Ejection Fraction (%)
+
+```{r}
+favstats(df$ejection_fraction ~ df$DEATH_EVENT) %>% pander()
+
+ggplot(df, aes(x = ejection_fraction)) +
+  geom_histogram(bins = 30) +
+  labs(
+    title = "Distribution of Ejection Fraction",
+    x = "Ejection Fraction (%)",
+    y = "Count"
+  )
+
+ggplot(df, aes(x = as.factor(DEATH_EVENT), y = ejection_fraction)) +
+  geom_boxplot() +
+  labs(
+    title = "Ejection Fraction by Mortality Outcome",
+    x = "Death Event (0 = Alive, 1 = Died)",
+    y = "Ejection Fraction (%)"
+  )
+```
+
+#### Age
+
+```{r}
+favstats(df$age ~ df$DEATH_EVENT) %>% pander()
+
+ggplot(df, aes(x = age)) +
+  geom_histogram(bins = 30) +
+  labs(
+    title = "Distribution of Age",
+    x = "Age in Years",
+    y = "Count"
+  )
+
+ggplot(df, aes(x = as.factor(DEATH_EVENT), y = age)) +
+  geom_boxplot() +
+  labs(
+    title = "Ejection Fraction by Mortality Outcome",
+    x = "Death Event (0 = Alive, 1 = Died)",
+    y = "Age"
+  )
+```
+
+## Logistic Regression Modeling
+
+### Mathematical Model
+$$
+  P(\text{Mortality}_i = 1|\, \text{Serum Creatinine}_i, \text{Ejection Fraction}_i, \text{Age Over 80}_i) 
+$$
+$$
+  =
+$$
+$$
+  \frac{e^{ \text{Serum Creatinine}_i + \text{Ejection Fraction}_i + \text{Age Over 80}_i)}}{1+e^{ \text{Serum Creatinine}_i + \text{Ejection Fraction}_i + \text{Age Over 80}_i)}}
+$$
+
+### Logistic Regression Summary
+```{r}
+# Rename so that makes sense on plot
+df <- df %>%
+  rename(
+    `Mortality (Death Event)` = DEATH_EVENT,
+    `Ejection Fraction (%)` = ejection_fraction,
+    `Serum Creatinine (mg/dL)` = serum_creatinine
+  )
+```
+
+```{r}
+set.seed(5)
+
+n <- nrow(df)
+
+keep <- sample(1:n, size = round(0.75 * n))
+mytrain <- df[keep, ]
+mytest <- df[-keep, ]
+
+
+# My model is here
+my_glm <- glm(`Mortality (Death Event)` ~ `Ejection Fraction (%)` + `Serum Creatinine (mg/dL)` + eighty_years_old,
+              data = mytrain, family = "binomial")
+
+summary(my_glm) %>% pander()
+
+
+#cat("\nModel AIC:", AIC(my_glm), "\n")
+```
+
+On the above graph we see a significantly different probability for people above 80 years old(blue plane) and those younger (red plane)
+
+### Interpretation
+
+From this model we understand the following:
+
+- For every 1% change in the Ejection Fraction the log-odds of mortality increases by -0.06485. Converting this to an odds ratio, $e^{-0.06485}$, we get 0.94, **meaning the odds of mortality decrease by about 6% each 1% more of blood ejected from the left ventricle with each contraction**
+- For every 1 mg/dL of Serum Creatinine the log-odds of mortality increases by 0.6664. Converting this to an odds ratio, $e^{0.6664}$, we get 1.94, **meaning the odds of mortality increase by about 95% each 1 mg/dl more of of Serum Creatinine in the patient's blood**
+- When the patient is 80 years old or older the log-odds of mortality increases by 1.625. Converting this to an odds ratio, $e^{1.625}$, we get 5.08, **meaning the odds of mortality increase by about 408% when the patient is 80 or older**
+
+### 3D Visualization of Model
+```{r, warning=FALSE, message=FALSE}
+scatter_3d_logistic_two_line(my_glm)
+```
+
+## Model Validation
+
+```{r}
+mypreds <- predict(my_glm, mytest, type="response")
+
+callit <- ifelse(mypreds > 0.5, 1, 0)
+
+table(mytest$`Mortality (Death Event)`, callit) %>% pander()
+
+pcc <- sum(callit == mytest$`Mortality (Death Event)`) / length(mytest$`Mortality (Death Event)`)
+
+pander(paste("The model correctly classified", round(pcc*100, 2), "of patients using a 0.5 probability threshold for mortality"))
+```
+
+## Conclusion
+
+In this analysis, we developed a logistic regression model to predict mortality in heart failure patients using ejection fraction, serum creatinine, and age over 80 as predictors. The model demonstrated strong predictive performance, **correctly classifying approximately 80% of patients** at a 0.5 probability threshold.
+
+Key clinical insights include:
+
+- **Ejection fraction**: Higher values reduce the odds of mortality; each 1% increase corresponds to a **~6% decrease in mortality risk**.
+- **Serum creatinine**: Elevated levels strongly increase mortality risk; **each 1 mg/dL rise nearly doubles the odds of death**.
+- **Age ≥ 80**: Being 80 or older significantly increases mortality risk, **with more than a fourfold increase in odds compared to younger patients**.
+
+These findings can help clinicians identify high-risk patients and prioritize interventions, though validation on external datasets is recommended before clinical deployment.

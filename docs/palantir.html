@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+
+
+<title>A Stochastic Analysis of Palantir Technologies (PLTR) Stocks</title>
+
+<script src="site_libs/header-attrs-2.30/header-attrs.js"></script>
+<script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/cerulean.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<!-- Meta -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- SEO (optional but recommended) -->
+<meta name="description" content="Ethan Saline Portfolio – Data Science, Machine Learning, Bioinformatics, and Statistical Analysis">
+<meta name="author" content="Ethan Saline">
+
+<!-- Google Font -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Optional: smooth scrolling -->
+<style>
+  html {
+    scroll-behavior: smooth;
+  }
+</style>
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+
+
+<style type="text/css">
+  code {
+    white-space: pre;
+  }
+  .sourceCode {
+    overflow: visible;
+  }
+</style>
+<style type="text/css" data-origin="pandoc">
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #aaaaaa;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+div.sourceCode
+  {  background-color: #f8f8f8; }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ef2929; } /* Alert */
+code span.an { color: #8f5902; font-weight: bold; font-style: italic; } /* Annotation */
+code span.at { color: #204a87; } /* Attribute */
+code span.bn { color: #0000cf; } /* BaseN */
+code span.cf { color: #204a87; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #4e9a06; } /* Char */
+code span.cn { color: #8f5902; } /* Constant */
+code span.co { color: #8f5902; font-style: italic; } /* Comment */
+code span.cv { color: #8f5902; font-weight: bold; font-style: italic; } /* CommentVar */
+code span.do { color: #8f5902; font-weight: bold; font-style: italic; } /* Documentation */
+code span.dt { color: #204a87; } /* DataType */
+code span.dv { color: #0000cf; } /* DecVal */
+code span.er { color: #a40000; font-weight: bold; } /* Error */
+code span.ex { } /* Extension */
+code span.fl { color: #0000cf; } /* Float */
+code span.fu { color: #204a87; font-weight: bold; } /* Function */
+code span.im { } /* Import */
+code span.in { color: #8f5902; font-weight: bold; font-style: italic; } /* Information */
+code span.kw { color: #204a87; font-weight: bold; } /* Keyword */
+code span.op { color: #ce5c00; font-weight: bold; } /* Operator */
+code span.ot { color: #8f5902; } /* Other */
+code span.pp { color: #8f5902; font-style: italic; } /* Preprocessor */
+code span.sc { color: #ce5c00; font-weight: bold; } /* SpecialChar */
+code span.ss { color: #4e9a06; } /* SpecialString */
+code span.st { color: #4e9a06; } /* String */
+code span.va { color: #000000; } /* Variable */
+code span.vs { color: #4e9a06; } /* VerbatimString */
+code span.wa { color: #8f5902; font-weight: bold; font-style: italic; } /* Warning */
+
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<link rel="stylesheet" href="styles.css" type="text/css" />
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+details > summary > p:only-child {
+  display: inline;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+<style type="text/css">
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #adb5bd;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script type="text/javascript">
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark the anchor link active (and if it's in a dropdown, also mark that active)
+  var dropdown = menuAnchor.closest('li.dropdown');
+  if (window.bootstrap) { // Bootstrap 4+
+    menuAnchor.addClass('active');
+    dropdown.find('> .dropdown-toggle').addClass('active');
+  } else { // Bootstrap 3
+    menuAnchor.parent().addClass('active');
+    dropdown.addClass('active');
+  }
+
+  // Navbar adjustments
+  var navHeight = $(".navbar").first().height() + 15;
+  var style = document.createElement('style');
+  var pt = "padding-top: " + navHeight + "px; ";
+  var mt = "margin-top: -" + navHeight + "px; ";
+  var css = "";
+  // offset scroll position for anchor links (for fixed navbar)
+  for (var i = 1; i <= 6; i++) {
+    css += ".section h" + i + "{ " + pt + mt + "}\n";
+  }
+  style.innerHTML = "body {" + pt + "padding-bottom: 40px; }\n" + css;
+  document.head.appendChild(style);
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before, .tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "\e259";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "\e258";
+  font-family: 'Glyphicons Halflings';
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-bs-toggle="collapse" data-target="#navbar" data-bs-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html"><span style='font-family: Arial Black, Impact, sans-serif; font-weight: 600; font-size: 32px;'> Ethan Saline's Portfolio </span></a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Machine Learning
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="lung_cnn.html">Lung X-Ray CNN</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Statistical Analysis
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="logistic_regression.html">Logistic Regression: Heart Failure</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Bioinformatics
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="covid.html">Covid Transcriptomics</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Storytelling
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="ICE.html">Covid Transcriptomics</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Time Series
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="flu.html">Influenza Decomposition</a>
+    </li>
+    <li>
+      <a href="credit_cards.html">Credit Card Loans Decomposition</a>
+    </li>
+    <li>
+      <a href="palantir.html">Palantir Stock Stocastic Analysis</a>
+    </li>
+  </ul>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div id="header">
+
+
+
+<h1 class="title toc-ignore">A Stochastic Analysis of Palantir
+Technologies (PLTR) Stocks</h1>
+
+</div>
+
+
+<div id="executive-summary" class="section level2">
+<h2>Executive Summary</h2>
+<div id="key-findings" class="section level3">
+<h3>Key Findings</h3>
+<hr />
+</div>
+</div>
+<div id="introduction-context" class="section level2">
+<h2>Introduction &amp; Context</h2>
+<div id="purpose-of-analysis" class="section level3">
+<h3>Purpose of Analysis</h3>
+<p>The goal of this study is to <strong>evaluate the stochastic
+properties of Palantir stock since its IPO</strong>. Specifically, we
+aim to:</p>
+<ul>
+<li>Characterize the long-run behavior of prices and returns.</li>
+<li>Assess whether past price movements contain exploitable
+patterns.</li>
+<li>Determine suitability of common financial time series models (random
+walk, ARIMA, volatility models).</li>
+<li>Produce business relevant insights for investors, analysts, and risk
+managers.</li>
+</ul>
+</div>
+<div id="data-description" class="section level3">
+<h3>Data Description</h3>
+<p>Palantir <em>(NYSE: PLTR)</em> IPO’d on 2020-09-30. Data is retrieved
+from Yahoo Finance via tidyquant R package, which includes: - Date -
+Open/High/Low/Close - Adjusted close (split/dividend adjusted) - Volume
+- Adjusted close is used for return computation and modeling.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(tidyquant)</span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="fu">library</span>(tidyverse)</span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a><span class="fu">library</span>(tsibble)</span>
+<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a><span class="fu">library</span>(forecast)</span>
+<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a><span class="fu">library</span>(tseries)</span>
+<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a><span class="fu">library</span>(lubridate)</span>
+<span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a><span class="fu">library</span>(pander)</span>
+<span id="cb1-8"><a href="#cb1-8" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" tabindex="-1"></a>pltr_prices <span class="ot">&lt;-</span> <span class="fu">tq_get</span>(<span class="st">&quot;PLTR&quot;</span>,</span>
+<span id="cb1-10"><a href="#cb1-10" tabindex="-1"></a>                      <span class="at">get =</span> <span class="st">&quot;stock.prices&quot;</span>,</span>
+<span id="cb1-11"><a href="#cb1-11" tabindex="-1"></a>                      <span class="at">from =</span> <span class="st">&quot;2020-09-30&quot;</span>,</span>
+<span id="cb1-12"><a href="#cb1-12" tabindex="-1"></a>                      <span class="at">to =</span> <span class="fu">Sys.Date</span>())</span>
+<span id="cb1-13"><a href="#cb1-13" tabindex="-1"></a></span>
+<span id="cb1-14"><a href="#cb1-14" tabindex="-1"></a>pltr_ts <span class="ot">&lt;-</span> pltr_prices <span class="sc">%&gt;%</span></span>
+<span id="cb1-15"><a href="#cb1-15" tabindex="-1"></a>  <span class="fu">select</span>(date, adjusted) <span class="sc">%&gt;%</span></span>
+<span id="cb1-16"><a href="#cb1-16" tabindex="-1"></a>  <span class="fu">as_tsibble</span>(<span class="at">index =</span> date)</span></code></pre></div>
+<hr />
+</div>
+</div>
+<div id="exploratory-data-analysis" class="section level2">
+<h2>Exploratory Data Analysis</h2>
+<div id="price-dynamics" class="section level3">
+<h3>Price Dynamics</h3>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">ggplot</span>(pltr_prices, <span class="fu">aes</span>(date, adjusted)) <span class="sc">+</span></span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>  <span class="fu">geom_line</span>(<span class="at">color =</span> <span class="st">&quot;steelblue&quot;</span>) <span class="sc">+</span></span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">&quot;PLTR Adjusted Closing Price&quot;</span>,</span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">&quot;Date&quot;</span>, <span class="at">y =</span> <span class="st">&quot;Price (USD)&quot;</span>) <span class="sc">+</span></span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>  <span class="fu">theme_minimal</span>()</span></code></pre></div>
+<p><img src="palantir_files/figure-html/unnamed-chunk-2-1.png" width="672" /></p>
+<p><strong>Observations</strong> <strong>Overall Trend</strong>: - The
+time series shows a long period of post IPO volatility followed by
+consolidation through 2021–2022. The most pronounced upward movement
+happens in 2023–2024, when the stock enters a strong, sustained growth
+phase.</p>
+<p><strong>Volatility</strong>: - The series displays substantial short
+term fluctuations, characteristic of technology equity. Volatility
+increases during major market events and around earnings periods.</p>
+<p><strong>Structural Change</strong>: - A clear structural break
+becomes visible starting in early 2023, marking the transition from a
+relatively flat price regime into a high growth period. This shift is
+consistent with Palantir’s increased AI driven commercial adoption and
+renewed investor sentiment.</p>
+<p><strong>Noisy Short Run Behavior</strong>: - Despite the clear long
+term upward movement, day to day price behavior remains highly erratic,
+indicating that short run dynamics continue to be driven by information
+shocks and speculative trading.</p>
+<hr />
+<p>##Return Computation &amp; Statistical Properties ### Daily Log
+Returns</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>pltr_returns <span class="ot">&lt;-</span> pltr_prices <span class="sc">%&gt;%</span></span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>  <span class="fu">arrange</span>(date) <span class="sc">%&gt;%</span></span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">log_return =</span> <span class="fu">log</span>(adjusted <span class="sc">/</span> <span class="fu">lag</span>(adjusted))) <span class="sc">%&gt;%</span></span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>  <span class="fu">drop_na</span>()</span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a><span class="fu">ggplot</span>(pltr_returns, <span class="fu">aes</span>(date, log_return)) <span class="sc">+</span></span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>  <span class="fu">geom_line</span>(<span class="at">color =</span> <span class="st">&quot;firebrick&quot;</span>) <span class="sc">+</span></span>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">&quot;Daily Log Returns of PLTR&quot;</span>,</span>
+<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a>       <span class="at">x =</span> <span class="st">&quot;Date&quot;</span>, <span class="at">y =</span> <span class="st">&quot;Log Return&quot;</span>) <span class="sc">+</span></span>
+<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a>  <span class="fu">theme_minimal</span>()</span></code></pre></div>
+<p><img src="palantir_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
+<hr />
+</div>
+</div>
+<div id="stationarity-analysis" class="section level2">
+<h2>Stationarity Analysis</h2>
+<div id="price-series-stationarity-test" class="section level3">
+<h3>Price Series Stationarity Test</h3>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">adf.test</span>(pltr_ts<span class="sc">$</span>adjusted) <span class="sc">%&gt;%</span> <span class="fu">pander</span>()</span></code></pre></div>
+<table style="width:89%;">
+<caption>Augmented Dickey-Fuller Test: <code>pltr_ts$adjusted</code>
+<strong>Result</strong>: Fails to reject nonstationarity. This
+reinforces that we need to work with returns, not prices.</caption>
+<colgroup>
+<col width="23%" />
+<col width="16%" />
+<col width="13%" />
+<col width="34%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center">Test statistic</th>
+<th align="center">Lag order</th>
+<th align="center">P value</th>
+<th align="center">Alternative hypothesis</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">0.2264</td>
+<td align="center">10</td>
+<td align="center">0.99</td>
+<td align="center">stationary</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div id="return-series-stationarity-test" class="section level2">
+<h2>Return Series Stationarity Test</h2>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="fu">adf.test</span>(pltr_returns<span class="sc">$</span>log_return) <span class="sc">%&gt;%</span> <span class="fu">pander</span>()</span></code></pre></div>
+<table style="width:90%;">
+<caption>Augmented Dickey-Fuller Test:
+<code>pltr_returns$log_return</code></caption>
+<colgroup>
+<col width="23%" />
+<col width="16%" />
+<col width="15%" />
+<col width="34%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center">Test statistic</th>
+<th align="center">Lag order</th>
+<th align="center">P value</th>
+<th align="center">Alternative hypothesis</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">-9.913</td>
+<td align="center">10</td>
+<td align="center">0.01 * *</td>
+<td align="center">stationary</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Result</strong>: Significant -&gt; returns are
+stationary.</p>
+<p><em>This is a prerequisite for stochastic modeling</em></p>
+<hr />
+<p>##Time Series Decomposition Because returns lack seasonality, we
+decompose the price series instead.</p>
+<div id="stl-decomposition" class="section level3">
+<h3>STL Decomposition</h3>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>pltr_ts_vec <span class="ot">&lt;-</span> <span class="fu">ts</span>(pltr_ts<span class="sc">$</span>adjusted,</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>                  <span class="at">frequency =</span> <span class="dv">365</span>)</span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a></span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>stl_fit <span class="ot">&lt;-</span> <span class="fu">stl</span>(pltr_ts_vec, <span class="at">s.window =</span> <span class="st">&quot;periodic&quot;</span>)</span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a></span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a><span class="fu">autoplot</span>(stl_fit) <span class="sc">+</span></span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">&quot;STL Decomposition of PLTR Adjusted Prices&quot;</span>)</span></code></pre></div>
+<p><img src="palantir_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
+<p><strong>Interpretation</strong> - <strong>Trend</strong>: The trend
+component captures the long term structural movements of PLTR. The most
+significant upswing happens in 2023–2024, where the stock shows strong
+AI-driven growth. Earlier periods (2020–2021) show only the initial post
+IPO rise followed by a major correction. The trend clearly illustrates
+PLTR’s transition from early volatility into a strong sustained growth
+phase around 2023–2024. - <strong>Seasonal</strong>: While the STL
+decomposition produces an apparent seasonal pattern, <strong>this should
+not be interpreted as true economic seasonality</strong>. Daily equity
+prices do not follow a repeating annual cycle; instead, STL imposes a
+seasonal component by construction. The strong appearance of seasonality
+is due to the interaction of <strong>non-linear price trends</strong>,
+<strong>volatility bursts</strong>, and the <strong>forced yearly
+frequency of STL</strong>. - <strong>Remainder</strong>: The irregular
+component remains large and volatile, consistent with the stochastic
+nature of equity returns. Most short-term variation cannot be explained
+by trend or artificial seasonality.</p>
+<hr />
+<p>##Autocorrelation Analysis ###ACF and PACF of Log Returns</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">acf</span>(pltr_returns<span class="sc">$</span>log_return, <span class="at">main =</span> <span class="st">&quot;ACF of PLTR Daily Log Returns&quot;</span>)</span></code></pre></div>
+<p><img src="palantir_files/figure-html/unnamed-chunk-7-1.png" width="672" /></p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">pacf</span>(pltr_returns<span class="sc">$</span>log_return, <span class="at">main =</span> <span class="st">&quot;PACF of PLTR Daily Log Returns&quot;</span>)</span></code></pre></div>
+<p><img src="palantir_files/figure-html/unnamed-chunk-7-2.png" width="672" /></p>
+<p><strong>Interpretation</strong> While the PACF of daily PLTR returns
+shows a faint sinusoidal pattern, the magnitudes of the correlations
+remain very small. This suggests weak cyclical behavior, possibly due to
+day-of-week or reporting effects, but returns are overall uncorrelated
+and essentially unpredictable in the short term. Investors cannot
+reliably exploit these minor patterns for trading.</p>
+<hr />
+</div>
+</div>
+<div id="volatility-behavior" class="section level2">
+<h2>Volatility Behavior</h2>
+<p>Even when returns themselves lack autocorrelation, the squared
+returns often do not.</p>
+<div id="autocorrelation-of-squared-returns" class="section level3">
+<h3>Autocorrelation of Squared Returns</h3>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="fu">acf</span>(pltr_returns<span class="sc">$</span>log_return<span class="sc">^</span><span class="dv">2</span>,</span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a>    <span class="at">main =</span> <span class="st">&quot;ACF of Squared Returns (Volatility Clustering Check)&quot;</span>)</span></code></pre></div>
+<p><img src="palantir_files/figure-html/unnamed-chunk-8-1.png" width="672" /></p>
+<p><strong>Interpretation</strong> The ACF of squared PLTR returns shows
+only minor deviations from zero, barely exceeding the significance
+bounds. This indicates that volatility clustering is weak, and most
+short term variations in returns are essentially unpredictable. While
+GARCH type models could be applied, their added value in forecasting
+daily volatility is limited in this case.</p>
+<hr />
+<p>##Stochastic Model Interpretation <strong>Return Dynamics</strong>:
+PLTR daily log returns are approximately white noise being uncorrelated,
+roughly stationary, and unpredictable on a day-to-day basis.</p>
+<p><strong>Price Dynamics</strong>: The nonstationary adjusted prices
+can be described as a random walk with drift:</p>
+<p><span class="math display">\[
+P_t = P_{t-1}*e^{\mu+\epsilon_t}
+\]</span> where <span class="math inline">\(\mu\)</span> is the mean
+daily return (near zero) and <span
+class="math inline">\(\epsilon_t\)</span> captures stochastic
+shocks.</p>
+<p><strong>Volatility Considerations</strong>: While clustering is weak
+at the daily level, conditional volatility models could be applied for
+risk management over longer horizons, though their practical impact is
+limited for PLTR in this period.</p>
+<hr />
+</div>
+</div>
+<div id="business-implications" class="section level2">
+<h2>Business Implications</h2>
+<p><strong>Return Predictability</strong>: Short term returns are
+effectively unpredictable; yesterday’s performance gives little
+information about tomorrow’s.</p>
+<p><strong>Risk Focus</strong>: Investors should emphasize portfolio
+diversification and risk management, rather than attempting to time PLTR
+trades based on past returns.</p>
+<p><strong>Volatility Monitoring</strong>: Even weak autocorrelation in
+squared returns implies that extreme events or shocks may occur
+sporadically; monitoring news and market conditions is important.</p>
+<p><strong>Strategic Insight</strong>: PLTR’s price behavior reflects
+typical growth equity dynamics, strong long term trend punctuated by
+stochastic day to day variation. Stakeholders should prioritize long
+term trend understanding over daily movement prediction.</p>
+<hr />
+</div>
+<div id="conclusions" class="section level2">
+<h2>Conclusions</h2>
+<ul>
+<li>PLTR returns exhibit minimal autocorrelation and weak volatility
+clustering, consistent with efficient market behavior.</li>
+<li>STL decomposition confirms that trend dominates, while irregular
+shocks account for most daily fluctuations.</li>
+<li>Random walk modeling captures the stochastic nature of prices, and
+short-term forecasting of returns is unreliable.</li>
+<li>Risk management, diversification, and understanding of
+macro/sectoral factors are far more important than daily return
+prediction.</li>
+</ul>
+</div>
+
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

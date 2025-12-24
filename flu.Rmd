@@ -1,0 +1,143 @@
+---
+title: "Flu Data Decomposition"
+---
+
+# Introduction
+
+We will be analyzing CDC gathered **Influenza-like illness (ILI) surveillance data** in order to see the seasonal dynamics of respiratory disease spread. Because this data is collected weekly over many years, it can show distinct patterns that can be better understood through time series decomposition.
+
+*For Note: CDC defines ILI as fever and either cough or sore throat, with symptom onset within 7 days*
+
+In this analysis, we use a **multiplicative decomposition** framework to the weekly ILI number of patients. We will separate the observed data into three key parts:
+
+1. **Trend** – the long-term direction of ILI activity across years.
+2. **Seasonal** – the recurring, predictable fluctuations that reflect the annual influenza cycle.
+3. **Random** – the irregular variation not explained by trend or seasonality.
+
+The reason we use a multiplicative model with an additive randomness instead of a purely additive one is because seasonal peaks in ILI cases tend to grow proportionally with the overall level of activity, or in other words, it seems to grow together with the trend. By log-transforming the data prior to decomposition, we stabilize variance and ensure that the seasonal component scales naturally with the trend.
+
+## The Data
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Loading R packages
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(tidyverse, 
+               tsibble, fable,
+               feasts, tsibbledata,
+               fable.prophet,
+               patchwork,
+               lubridate, 
+               rio,
+               ggplot2,
+               kableExtra
+               )
+
+df <- read.csv("data/ILINet.csv", skip = 1, header = TRUE)
+```
+
+```{r, warning=FALSE, message=FALSE}
+df$Date <- as.Date(paste(df$YEAR, df$WEEK, 1, sep = "-"), "%Y-%U-%u")
+# Explanation:
+# %Y = 4-digit year
+# %U = week number (00–53, starting on Sunday)
+# %u = weekday number (1 = Monday, 7 = Sunday), here we pick 1 for Monday
+
+ggplot(df, aes(x = Date, y = ILITOTAL)) +
+  geom_line(color = "steelblue") +
+  labs(title = "Influenza-Like Illness in the US",
+       subtitle = "Gathered by the CDC",
+       x = "Date",
+       y = "Total Number of Patients Cases") +
+  theme_minimal()
+```
+
+As we can see the cases of ILI peak every year between December and Febuary, with an interesting exception in 2021. 
+
+According to The National Library of Medicine "ILI cases were exceptionally low in 2021 as a direct result of widespread, non-pharmaceutical interventions (NPIs) implemented to curb the spread of COVID-19. These measures significantly reduced transmission of many respiratory viruses, including the flu. For the 2020–2021 season, many countries reported historically low influenza circulation." [^1]
+
+# Model Reasoning
+
+Here we are using a Multiplicative Model to decompose our data.
+
+$$
+\text{Observed} \;\approx\; \text{Trend} \times \text{Seasonal} + \text{Random}
+$$
+
+The reason we are using this is because the seasonal peaks in ILI cases tend to grow proportionally with the overall level of activity. We are saying that the Seasonality and Randomness are growing together with the trend. 
+
+The reason we have Random as an additive component is because the data had a tendancy to credit Random noise with what should have been seasonality and trend. 
+
+# Analysis
+
+```{r, warning=FALSE, message=FALSE}
+# Convert ILITOTAL to a time series object (weekly frequency)
+ili_ts <- ts(df$ILITOTAL, start = c(min(df$YEAR), min(df$WEEK)), frequency = 52)
+
+# Multiplicative decomposition: log-transform first
+ili_ts_log <- log(ili_ts + 1)  # add 1 to avoid log(0)
+decomp_log <- stl(ili_ts_log, s.window = "periodic", robust = TRUE)
+
+# Convert decomposition back to original scale
+decomp_df <- data.frame(
+  Date = df$Date,
+  observed = exp(decomp_log$time.series[, "remainder"] +
+                 decomp_log$time.series[, "trend"] +
+                 decomp_log$time.series[, "seasonal"]),
+  trend = exp(decomp_log$time.series[, "trend"]),
+  seasonal = exp(decomp_log$time.series[, "seasonal"])
+)
+
+decomp_df$random <- decomp_df$observed - (decomp_df$trend * decomp_df$seasonal)
+
+# Multiplicatively seasonally adjusted series
+decomp_df$seasonally_adjusted <- decomp_df$observed / decomp_df$seasonal
+
+# --- PLOTS ---
+
+# Observed series
+obs_plot <- ggplot(decomp_df, aes(x = Date, y = observed)) + 
+  geom_line(color = "steelblue") +
+  labs(title = "Observed ILI Cases", x = NULL, y = "ILI Total") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Trend component
+trend_plot <- ggplot(decomp_df, aes(x = Date, y = trend)) + 
+  geom_line(color = "blue") +
+  labs(title = "Trend Component", x = NULL, y = "ILI Total") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Seasonally adjusted series
+sa_plot <- ggplot(decomp_df, aes(x = Date, y = seasonally_adjusted)) + 
+  geom_line(color = "red") +
+  labs(title = "Multiplicatively Seasonally Adjusted ILI", x = "Date", y = "ILI Total") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Random (remainder) component
+random_plot <- ggplot(decomp_df, aes(x = Date, y = random)) + 
+  geom_line(color = "darkgreen") +
+  labs(title = "Random Component", x = NULL, y = "Factor (≈1)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Combine all four plots vertically
+obs_plot / trend_plot / random_plot / sa_plot
+```
+
+**Trend**
+The trend represents the long-term progression of ILI activity across years. We can see that the trend is growing upwards with a small dip in 2021 because of teh Covid measures but then continues growing even faster afterwords as a result of Covid 19. The trend has evened out since the end of teh pandemic but remains higher than it was earlier than 2021. 
+
+**Seasonality**
+The seasonal component reflects the recurring, predictable pattern of influenza activity that repeats annually. We can see the "flu season" every year by the spikes in the data. 
+
+**Random**
+The random or remainder component is what remains after accounting for both the long-term trend and the repeating seasonal pattern. It shows irregular, unpredictable fluctuations in the data, such as sudden outbreaks, reporting changes, or other anomalies not explained by the trend or seasonality.
+
+# Sources
+
+Data Collected from: https://gis.cdc.gov/grasp/fluview/fluportaldashboard.html
+
+[^1]: https://pmc.ncbi.nlm.nih.gov/articles/PMC8285668/#:~:text=Previously%2C%20there%20was%20concern%20regarding,aforementioned%20COVID%2D19%20mitigation%20strategies.

@@ -27,7 +27,7 @@ from kaggle.api.kaggle_api_extended import KaggleApi
 # -------------------------
 IMG_SIZE = 128
 BATCH_SIZE = 32
-NUM_EPOCHS = 20
+NUM_EPOCHS = 8
 NUM_CLASSES = 4
 SEED = 42
 ```
@@ -149,7 +149,7 @@ class_weights_array = class_weight.compute_class_weight(
 class_weights_dict = dict(enumerate(class_weights_array))
 ```
 
-```{python}
+```{python, results='hide'}
 # -------------------------
 # Stage 5: Train model (with checkpoint)
 # -------------------------
@@ -204,5 +204,4 @@ plt.show()
 # Stage 7: Cleanup temp directory
 # -------------------------
 tmp_dir.cleanup()
-
 ```

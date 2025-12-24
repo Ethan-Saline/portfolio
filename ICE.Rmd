@@ -1,0 +1,1496 @@
+---
+title: "Analyzing U.S. ICE Arrests and Deportations"
+---
+
+```{r, message=FALSE, warning=FALSE}
+library(readxl)
+library(tidyverse)
+library(httr)
+library(pander)
+library(sf)
+library(dplyr)
+library(stringr)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(leaflet)
+library(RColorBrewer)
+library(xts)
+library(dygraphs)
+library(scales)
+
+# This makes data loading easier
+load_excel_from_url <- function(url) {
+  temp_xlsx <- tempfile(fileext = ".xlsx")
+
+  h <- handle(url)
+
+  GET(
+    url,
+    handle = h,
+    write_disk(temp_xlsx, overwrite = TRUE),
+    user_agent("R httr")
+  )
+
+  stopifnot(file.exists(temp_xlsx))
+
+  read_xlsx(temp_xlsx, skip = 6)
+}
+
+# Get arrest data
+arrests <- load_excel_from_url(
+  "https://ucla.app.box.com/index.php?rm=box_download_shared_file&shared_name=9d8qnnduhus4bd5mwqt7l95kz34fic2v&file_id=f_1998578415974"
+)
+
+# Clean up the missing
+arrests <- arrests %>%
+  mutate(
+    `Apprehension AOR` = if_else(
+      is.na(`Apprehension AOR`),
+      "HQ Area of Responsibility",
+      `Apprehension AOR`
+    )
+  )
+
+# Get deportation data
+deportations <- load_excel_from_url(
+  "https://ucla.app.box.com/index.php?rm=box_download_shared_file&shared_name=9d8qnnduhus4bd5mwqt7l95kz34fic2v&file_id=f_1998579549029"
+)
+
+# Get map of Areas
+# Download & unzip the shapefile for the AORs
+zip_url <- "https://github.com/deportationdata/ice/raw/refs/heads/main/data/ice-aor-shp.zip"
+tmp <- tempfile(fileext = ".zip")
+download.file(zip_url, tmp, quiet = TRUE)  # suppress download messages
+
+unzip(tmp, exdir = "ice_aor", overwrite = TRUE)
+
+# Read shapefile silently
+aor_sf <- suppressMessages(st_read("ice_aor/ice-aor-shp.shp", quiet = TRUE))
+
+# Transform CRS to WGS 84 (EPSG:4326) for Leaflet
+aor_sf <- st_transform(aor_sf, 4326)
+```
+
+## Introduction
+
+The U.S. Immigration and Customs Enforcement (ICE) agency enforces federal immigration laws through arrests, detentions, and deportations. In recent years, **ICE has faced accusations of overreach and abuse of power**, including reports of wrongful detentions and deportations. This analysis approaches these topics neutrally, focusing on empirical patterns in enforcement activity rather than policy judgment.
+
+Using publicly available ICE data obtained from the [Deportation Data Project](https://deportationdata.org/), this report examines arrests and deportations across the United States, organized by Area of Responsibility (AOR), the regional offices responsible for specific geographic areas. The analysis includes national and regional trends over time, the criminal history of deportees, instances of deportations to countries other than the individual’s citizenship or birth country, and the distribution of deportees by nationality.
+
+### Map
+```{r}
+# Summarize deportations
+dep_aor <- deportations %>%
+  group_by(`Docket AOR`) %>%
+  summarise(Count_deport = n(), .groups = "drop") %>%
+  dplyr::rename(aor_nam = `Docket AOR`) %>%
+  mutate(
+    aor_nam = str_remove(aor_nam, " Area of Responsibility$"),
+    aor_nam = str_replace(aor_nam, "^St\\. Paul$", "St Paul")
+  )
+
+# Summarize arrests
+arrest_aor <- arrests %>% 
+  dplyr::rename(`Docket AOR` = `Apprehension AOR`) %>%
+  group_by(`Docket AOR`) %>%
+  summarise(Count_arrest = n(), .groups = "drop") %>%
+  dplyr::rename(aor_nam = `Docket AOR`) %>%
+  mutate(
+    aor_nam = str_remove(aor_nam, " Area of Responsibility$"),
+    aor_nam = str_replace(aor_nam, "^St\\. Paul$", "St Paul")
+  )
+
+# Join counts
+aor_sf <- aor_sf %>%
+  left_join(dep_aor, by = "aor_nam") %>%
+  left_join(arrest_aor, by = "aor_nam") %>%
+  mutate(
+    Count_deport = ifelse(is.na(Count_deport), 0, Count_deport),
+    Count_arrest = ifelse(is.na(Count_arrest), 0, Count_arrest)
+  )
+
+# Define color palettes
+pal_deport <- colorNumeric(
+  palette = colorRamp(c("#ffcccc", "#990000")),  # light red to dark red
+  domain = aor_sf$Count_deport,
+  na.color = "#cccccc"
+)
+
+pal_arrest <- colorNumeric(
+  palette = colorRamp(c("#ffcccc", "#990000")),
+  domain = aor_sf$Count_arrest,
+  na.color = "#cccccc"
+)
+
+# Leaflet map
+leaflet(aor_sf) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  
+  setView(lng = -98.5795, lat = 39.8283, zoom = 4) %>%  
+  
+  # Deportation polygons
+  addPolygons(
+    fillColor = ~pal_deport(Count_deport),
+    weight = 0.5,
+    color = "white",
+    fillOpacity = 0.8,
+    group = "Deportations",
+    highlightOptions = highlightOptions(
+      weight = 2,
+      color = "#666",
+      fillOpacity = 0.9,
+      bringToFront = TRUE
+    ),
+    label = ~paste0(
+      "<strong>", aor_nam, "</strong><br/>",
+      "Deportations: ", Count_deport, "<br/>",
+      "Arrests: ", Count_arrest
+    ) %>% lapply(htmltools::HTML)
+  ) %>%
+  
+  # Arrest polygons
+  addPolygons(
+    fillColor = ~pal_arrest(Count_arrest),
+    weight = 0.5,
+    color = "white",
+    fillOpacity = 0.8,
+    group = "Arrests",
+    highlightOptions = highlightOptions(
+      weight = 2,
+      color = "#666",
+      fillOpacity = 0.9,
+      bringToFront = TRUE
+    ),
+    label = ~paste0(
+      "<strong>", aor_nam, "</strong><br/>",
+      "Deportations: ", Count_deport, "<br/>",
+      "Arrests: ", Count_arrest
+    ) %>% lapply(htmltools::HTML)
+  ) %>%
+  
+  # Layer control to toggle
+  addLayersControl(
+    baseGroups = c("Deportations", "Arrests"),
+    options = layersControlOptions(collapsed = FALSE)
+  )
+```
+
+## Time Series {.tabset .tabset-pills}
+
+Contrary to popular belief the Trump inagguaration and current administration (up to July 2025) has not made a noticable increase in the United States as a whole until the massive Federal Troop Deployment in June 2025 where there is a spike in arrests and deportations peaks. **However** when looking at individual Areas of Responsibility we see that both of these even led to a **major increase in arrests** acrossed most regions of the United States. 
+
+This is because areas with already massive deportations and arrests have been largely unaltered by the administration and as the carry the bulk of ICE involvement, they over shadow the Trump administration's changes in policy in U.S. totals. **We do see a major spike in most AORs** 
+
+On July 11 a [Court issued a restraining order](https://caselaw.findlaw.com/court/us-dis-crt-cd-cal/117475603.html) and so we see at the end of each time series, a massive drop in arrests. 
+
+### US Total
+
+```{r}
+# Arrests by week + AOR
+arrests_aor_ts <- arrests %>%
+  mutate(week = floor_date(`Apprehension Date`, "week")) %>%
+  dplyr::count(week, aor_nam = `Apprehension AOR`, name = "arrests")
+
+# Deportations by week + AOR
+deports_aor_ts <- deportations %>%
+  mutate(week = floor_date(`Departed Date`, "week")) %>%
+  dplyr::count(week, aor_nam = `Docket AOR`, name = "deportations")
+
+arrests_us <- arrests_aor_ts %>%
+  group_by(week) %>%
+  summarise(arrests_US = sum(arrests), .groups = "drop")
+
+deports_us <- deports_aor_ts %>%
+  group_by(week) %>%
+  summarise(deportations_US = sum(deportations), .groups = "drop")
+
+arrests_wide <- arrests_aor_ts %>%
+  pivot_wider(
+    names_from = aor_nam,
+    values_from = arrests,
+    values_fill = 0,
+    names_prefix = "arrests_"
+  )
+
+deports_wide <- deports_aor_ts %>%
+  pivot_wider(
+    names_from = aor_nam,
+    values_from = deportations,
+    values_fill = 0,
+    names_prefix = "deportations_"
+  )
+
+ts_all <- arrests_us %>%
+  full_join(deports_us, by = "week") %>%
+  full_join(arrests_wide, by = "week") %>%
+  full_join(deports_wide, by = "week") %>%
+  arrange(week) %>%
+  mutate(across(where(is.numeric), ~replace_na(.x, 0)))
+
+
+ts_xts <- xts(
+  ts_all %>% select(-week),
+  order.by = ts_all$week
+)
+
+# Dates go here
+trump_inaug <- as.Date("2025-01-20")
+mass_troop <- as.Date("2025-06-06")
+
+# US totals xts
+ts_us_xts <- xts(
+  ts_all %>% select(arrests_US, deportations_US),
+  order.by = ts_all$week
+)
+
+dygraph(ts_us_xts, main = "ICE Arrests and Deportations — US Total") %>%
+  dySeries("arrests_US", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations_US", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "bottom") %>%
+  dyRangeSelector()
+
+```
+
+### By Area Office {.tabset .tabset-pills}
+
+#### Atlanta
+
+```{r}
+ts_all_clean <- ts_all %>%
+  dplyr::rename_with(~ str_remove(.x, " Area of Responsibility$"))
+
+aor_name <- "Atlanta"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### Baltimore
+
+```{r}
+aor_name <- "Baltimore"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### Boston
+
+```{r}
+aor_name <- "Boston"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### Buffalo
+
+```{r}
+aor_name <- "Buffalo"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### Chicago
+
+```{r}
+aor_name <- "Chicago"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### Dallas
+
+```{r}
+aor_name <- "Dallas"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### Detroit
+
+```{r}
+aor_name <- "Detroit"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### Denver
+
+```{r}
+aor_name <- "Denver"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### El Paso
+
+[Deportations are down in El Paso](https://elpasomatters.org/2025/10/27/el-paso-immigration-arrests-drug-seizures-decline-under-trump-enforcement/), surprisingly, despite aggressive Trump administration crackdowns, because migrants are avoiding the area due to Mexico's crackdown on northbound flows, tighter U.S. asylum rules, increased enforcement leading to fewer encounters, and a shift towards more detention rather than immediate deportations
+
+```{r}
+aor_name <- "El Paso"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### Harlingen
+
+Here we see another suprising result. This follows the same pattern as El Paso
+
+```{r}
+aor_name <- "Harlingen"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### Houston
+
+```{r}
+aor_name <- "Houston"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### HQ
+
+HQ is the main body managing domestic immigration enforcement, providing strategic direction to 25 field offices, overseeing detention, arrests, removals, and coordinating specialized units like Air Operations (IAO) and the ICE Health Service Corps (IHSC) for national safety and law integrity
+
+If an arrest or deportation is labeled as HQ it means that the case has some connection to the national office. This might include:
+
+- **Prior Approval**: For certain sensitive enforcement actions, such as those occurring near a place of worship, an agent or officer must seek prior approval from ERO Headquarters (HQ)
+- **Case Management**: The case might be one of "special interest" or a significant operation that requires input, coordination, or oversight from leadership at the national level
+- **Coordination**: HQ is responsible for providing guidance and coordinating among the 25 ICE field offices across the nation, so the label may indicate that the case is part of a nationally coordinated effort or involves multiple field offices
+
+**In essence, the "HQ" designation signifies that the case is managed or monitored at a higher, national level within the ICE hierarchy, rather than being handled purely at the local field office level**
+
+```{r}
+aor_name <- "HQ"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### Los Angeles
+
+```{r}
+aor_name <- "Los Angeles"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### Miami
+
+```{r}
+aor_name <- "Miami"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### New Orleans
+
+```{r}
+aor_name <- "New Orleans"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### New York
+
+```{r}
+aor_name <- "New York City"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### Newark
+
+```{r}
+aor_name <- "Newark"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### Philadelphia
+
+```{r}
+aor_name <- "Philadelphia"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### Phoenix
+
+```{r}
+aor_name <- "Phoenix"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### San Antonio
+
+```{r}
+aor_name <- "San Antonio"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### San Diego
+
+```{r}
+aor_name <- "San Diego"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### San Francisco
+
+```{r}
+aor_name <- "San Francisco"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### Seattle
+
+```{r}
+aor_name <- "Seattle"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### Salt Lake
+
+```{r}
+aor_name <- "Salt Lake City"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### St. Paul
+
+```{r}
+aor_name <- "St. Paul"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+#### Washington
+
+```{r}
+aor_name <- "Washington"
+
+ts_one_aor <- ts_all_clean %>%
+  select(week,
+         all_of(paste0("arrests_", aor_name)),
+         all_of(paste0("deportations_", aor_name))) %>%
+  dplyr::rename(
+    arrests = all_of(paste0("arrests_", aor_name)),
+    deportations = all_of(paste0("deportations_", aor_name))
+  )
+
+ts_one_aor_xts <- xts(
+  ts_one_aor %>% select(-week),
+  order.by = as.Date(ts_one_aor$week)
+)
+
+dygraph(ts_one_aor_xts, main = paste("ICE Arrests and Deportations —", aor_name)) %>%
+  dySeries("arrests", label = "Arrests", color = "#4f7c82", strokeWidth = 2) %>%
+  dySeries("deportations", label = "Deportations", color = "#d7301f", strokeWidth = 2) %>%
+  dyOptions(drawPoints = FALSE, strokeWidth = 2) %>%
+  dyLegend(show = "follow", hideOnMouseOut = FALSE) %>%
+  dyEvent(trump_inaug, "Trump Inaugurated", labelLoc = "top") %>%
+  dyEvent(mass_troop, "Troop Deploy", labelLoc = "top") %>%
+  dyRangeSelector()
+```
+
+## Criminal Records
+
+Analysis of ICE deportations by area of responsibility shows that individuals with prior criminal records make up a portion of deportations, but the distribution varies across regions. Deportees are categorized into three groups: violent crime, convicted other crime, and no charges.
+
+The current administration has [claimed that ICE focuses on Violent Criminals](https://www.dhs.gov/news/2025/12/09/ice-arrests-worst-worst-criminal-illegal-aliens-including-pedophiles-armed-robbers) but this does not appear to be true
+
+The data shows that while many deportees have prior convictions, a substantial share of deportees have no recorded criminal charges
+
+Below we see that all regions above the Split Point are deporting more people without criminal charges than those with charges
+
+```{r}
+deportations_better <- deportations %>%
+  mutate(
+    violent = case_when(
+      str_detect(`MSC NCIC Charge`, regex(
+        "HOMICIDE|ASSAULT|ROBBERY|RAPE|SEX ASSAULT|LEWD|KIDNAP|ARSON|THREAT", 
+        ignore_case = TRUE
+      )) ~ "Violent",
+      !is.na(`MSC NCIC Charge`) ~ "Non-violent",
+      TRUE ~ "Unknown"
+    ),
+    criminal_df = case_when(
+      `MSC Criminal Charge Status Code` == "C" ~ "Convicted Criminal",
+      `MSC Criminal Charge Status Code` == "P" ~ "Pending criminal charge",
+      is.na(`MSC Criminal Charge Status Code`) ~ "No criminal charges"
+    )
+  )
+
+crim_cols <- deportations %>%
+  dplyr::rename(AOR = `Docket AOR`) %>%
+  mutate(AOR = str_remove(AOR, "\\s*Area of Responsibility$")) %>%
+  mutate(
+    nyt_category = case_when(
+      `MSC Criminal Charge Status Code` == "C" &
+        str_detect(`MSC NCIC Charge`, regex(
+          "HOMICIDE|ASSAULT|ROBBERY|RAPE|SEX ASSAULT|LEWD|KIDNAP|ARSON|THREAT",
+          ignore_case = TRUE
+        )) ~ "Violent crime",
+
+      `MSC Criminal Charge Status Code` == "C" ~ "Convicted other crime",
+
+      is.na(`MSC Criminal Charge Status Code`) ~ "No charges",
+
+      TRUE ~ NA_character_
+    )
+  )
+
+crim_grid <- crim_cols %>%
+  filter(!is.na(nyt_category)) %>%
+  dplyr::count(AOR, nyt_category) %>%
+  group_by(AOR) %>%
+  mutate(
+    pct = n / sum(n)
+  ) %>%
+  ungroup()
+
+us_total <- crim_cols %>%
+  filter(!is.na(nyt_category)) %>%
+  dplyr::count(nyt_category) %>%
+  mutate(
+    AOR = "U.S. total",
+    pct = n / sum(n)
+  )
+
+crim_grid_all <- bind_rows(us_total, crim_grid)
+
+aor_order <- crim_grid_all %>%
+  filter(nyt_category == "No charges") %>%
+  arrange(desc(pct)) %>%
+  pull(AOR)
+
+# Force U.S. total to the top
+aor_order <- c("U.S. total", setdiff(aor_order, "U.S. total"))
+
+crim_grid_all$AOR <- factor(crim_grid_all$AOR, levels = rev(aor_order))
+
+crim_grid_all$nyt_category <- factor(
+  crim_grid_all$nyt_category,
+  levels = c(
+    "Violent crime",
+    "Convicted other crime",
+    "No charges"
+  )
+)
+
+# Get the numeric y position for "Dallas"
+y_pos <- which(levels(crim_grid_all$AOR) == "Dallas") + 0.5  # +0.5 to put line above the bar
+
+ggplot(crim_grid_all, aes(x = pct, y = AOR, fill = nyt_category)) +
+  geom_col(width = 0.55) +
+  geom_text(
+    aes(label = scales::percent(pct, accuracy = 1)),
+    hjust = -0.1,
+    size = 3
+  ) +
+  facet_grid(. ~ nyt_category) +
+  scale_x_continuous(
+    limits = c(0, 1),
+    expand = expansion(mult = c(0, .15)),
+    labels = scales::percent
+  ) +
+  scale_fill_manual(values = c(
+    "Violent crime"         = "#c0392b",
+    "Convicted other crime" = "#f39c12",
+    "No charges"            = "#2c7fb8"
+  )) +
+  labs(
+    title = "Criminal history of deportees by area of responsibility",
+    subtitle = "Percent of deportations within each area",
+    x = NULL, y = NULL
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.position = "none"
+  ) +
+  # Add dotted line
+  geom_hline(yintercept = y_pos, linetype = "solid", color = "red") +
+  # Add label
+  annotate(
+    "text", x = 0.8, y = y_pos + 0.5, label = "Split Point", hjust = 0.4, size = 3
+  )
+```
+
+## Deportations to Wrong Countries
+
+Many have accused ICE of deporting people to the wrong countries or [even deporting U.S. citizens](https://www.americanimmigrationcouncil.org/blog/ice-deport-us-citizens/) and does not maintain adequate records to track these incidents
+
+For example, a man named [Kilmar Abrego Garcia](https://www.aclu.org/news/immigrants-rights/us-citizen-wrongfully-deported-mexico-settles-his-case-against-federal-government) was deported to El Salvador despite a court order barring his deportation to that country due to an administrative error
+
+Because of teh lack of records we cannot analyze the deportation of U.S. citizens, but we can look at the deportation of people to countries in which they do not have citizenship
+
+
+```{r}
+deport_wrong_country <- deportations %>%
+  mutate(
+    return_type = case_when(
+      !is.na(`Departure Country`) &
+        (`Departure Country` == `Citizenship Country` |
+         `Departure Country` == `Birth Country`) ~ "Returned to own country",
+      !is.na(`Departure Country`) ~ "Returned to different country",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(return_type)) %>%
+  dplyr::count(return_type)
+
+ggplot(deport_wrong_country, aes(x = return_type, y = n, fill = return_type)) +
+  geom_col(width = 0.6) +
+  geom_text(
+    aes(label = scales::comma(n)),
+    vjust = -0.4,
+    size = 4
+  ) +
+  scale_y_continuous(labels = scales::comma) +
+  scale_fill_manual(values = c(
+    "Returned to own country" = "#2c7fb8",
+    "Returned to different country" = "#c0392b"
+  )) +
+  labs(
+    title = "Deportation Destination Correctness",
+    x = NULL,
+    y = "Number of deportations"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "none",
+    panel.grid.minor = element_blank()
+  )
+```
+
+## Deportations by Country of Citizenship
+
+Analysis of ICE deportation data shows that the majority of individuals are returned to countries in Latin America, with Mexico representing the largest share. Other notable countries include Guatemala, Honduras, El Salvador, and Brazil. A smaller portion of deportations involves individuals from Africa, Asia, and Europe.
+
+```{r}
+# Detach xts if loaded because breaks the map :(
+if("package:xts" %in% search()) detach("package:xts", unload = TRUE)
+
+country_fix <- tribble(
+  ~country, ~ne_name,
+  "MEXICO", "Mexico",
+  "COLOMBIA", "Colombia",
+  "GUYANA", "Guyana",
+  "ECUADOR", "Ecuador",
+  "EL SALVADOR", "El Salvador",
+  "NICARAGUA", "Nicaragua",
+  "ANGOLA", "Angola",
+  "HONDURAS", "Honduras",
+  "SENEGAL", "Senegal",
+  "GUATEMALA", "Guatemala",
+  "BRAZIL", "Brazil",
+  "UNITED KINGDOM", "United Kingdom",
+  "CHINA, PEOPLES REPUBLIC OF", "China",
+  "VENEZUELA", "Venezuela",
+  "DOMINICAN REPUBLIC", "Dominican Rep.",
+  "ETHIOPIA", "Ethiopia",
+  "PERU", "Peru",
+  "CHILE", "Chile",
+  "HAITI", "Haiti",
+  "PAKISTAN", "Pakistan",
+  "BARBADOS", "Barbados",
+  "NEPAL", "Nepal",
+  "INDIA", "India",
+  "MOROCCO", "Morocco",
+  "PHILIPPINES", "Philippines",
+  "COSTA RICA", "Costa Rica",
+  "GHANA", "Ghana",
+  "GEORGIA", "Georgia",
+  "ROMANIA", "Romania",
+  "ARGENTINA", "Argentina",
+  "EGYPT", "Egypt",
+  "TURKIYE", "Turkey",
+  "RUSSIA", "Russia",
+  "ARMENIA", "Armenia",
+  "JORDAN", "Jordan",
+  "BURKINA FASO", "Burkina Faso",
+  "BANGLADESH", "Bangladesh",
+  "CUBA", "Cuba",
+  "IVORY COAST", "Côte d'Ivoire",
+  "BOLIVIA", "Bolivia",
+  "MAURITANIA", "Mauritania",
+  "VIETNAM", "Vietnam",
+  "ALBANIA", "Albania",
+  "JAMAICA", "Jamaica",
+  "PANAMA", "Panama",
+  "IRAN", "Iran",
+  "NIGERIA", "Nigeria",
+  "POLAND", "Poland",
+  "IRELAND", "Ireland",
+  "GUINEA", "Guinea",
+  "SRI LANKA", "Sri Lanka",
+  "GERMANY", "Germany",
+  "UZBEKISTAN", "Uzbekistan",
+  "AFGHANISTAN", "Afghanistan",
+  "CANADA", "Canada",
+  "CROATIA", "Croatia",
+  "UKRAINE", "Ukraine",
+  "BELIZE", "Belize",
+  "SPAIN", "Spain",
+  "SAUDI ARABIA", "Saudi Arabia",
+  "SYRIA", "Syria",
+  "ZAMBIA", "Zambia",
+  "BAHAMAS", "The Bahamas",
+  "CZECH REPUBLIC", "Czech Republic",
+  "BURUNDI", "Burundi",
+  "TAJIKISTAN", "Tajikistan",
+  "BELARUS", "Belarus",
+  "KYRGYZSTAN", "Kyrgyzstan",
+  "SIERRA LEONE", "Sierra Leone",
+  "SOMALIA", "Somalia",
+  "MICRONESIA, FEDERATED STATES OF", "Federated States of Micronesia",
+  "IRAQ", "Iraq",
+  "BHUTAN", "Bhutan",
+  "CHAD", "Chad",
+  "ZIMBABWE", "Zimbabwe",
+  "MOLDOVA", "Moldova",
+  "PORTUGAL", "Portugal",
+  "TAIWAN", "Taiwan",
+  "TRINIDAD AND TOBAGO", "Trinidad and Tobago",
+  "NETHERLANDS", "Netherlands",
+  "KOSOVO", "Kosovo",
+  "BURMA", "Myanmar",
+  "CAMEROON", "Cameroon",
+  "INDONESIA", "Indonesia",
+  "ITALY", "Italy",
+  "LAOS", "Laos",
+  "KENYA", "Kenya",
+  "SLOVAKIA", "Slovakia",
+  "AUSTRIA", "Austria",
+  "BULGARIA", "Bulgaria",
+  "TOGO", "Togo",
+  "SERBIA", "Serbia",
+  "CONGO", "Congo",
+  "GAMBIA", "Gambia",
+  "SOUTH KOREA", "South Korea",
+  "SWITZERLAND", "Switzerland",
+  "LITHUANIA", "Lithuania",
+  "MALAYSIA", "Malaysia",
+  "NORTH MACEDONIA", "North Macedonia",
+  "ISRAEL", "Israel",
+  "AZERBAIJAN", "Azerbaijan",
+  "MARSHALL ISLANDS", "Marshall Islands",
+  "FRANCE", "France",
+  "CAMBODIA", "Cambodia",
+  "ERITREA", "Eritrea",
+  "ALGERIA", "Algeria",
+  "SUDAN", "Sudan",
+  "URUGUAY", "Uruguay",
+  "GREECE", "Greece",
+  "NIGER", "Niger",
+  "LIBERIA", "Liberia",
+  "KAZAKHSTAN", "Kazakhstan",
+  "EQUATORIAL GUINEA", "Eq. Guinea",
+  "TUNISIA", "Tunisia",
+  "SWEDEN", "Sweden",
+  "THAILAND", "Thailand",
+  "KOREA", "South Korea",
+  "SOUTH AFRICA", "South Africa",
+  "DEM REP OF THE CONGO", "Dem. Rep. Congo",
+  "SOUTH SUDAN", "S. Sudan",
+  "BENIN", "Benin",
+  "LEBANON", "Lebanon",
+  "TANZANIA", "Tanzania",
+  "YEMEN", "Yemen",
+  "PALAU", "Palau",
+  "GUINEA-BISSAU", "Guinea-Bissau",
+  "PARAGUAY", "Paraguay",
+  "SAMOA", "Samoa",
+  "LATVIA", "Latvia",
+  "AUSTRALIA", "Australia",
+  "MALI", "Mali",
+  "GRENADA", "Grenada",
+  "DENMARK", "Denmark",
+  "JAPAN", "Japan",
+  "BOSNIA-HERZEGOVINA", "Bosnia and Herz.",
+  "NORWAY", "Norway",
+  "HUNGARY", "Hungary",
+  "BELGIUM", "Belgium",
+  "FIJI", "Fiji",
+  "KUWAIT", "Kuwait",
+  "UGANDA", "Uganda",
+  "NEW ZEALAND", "New Zealand",
+  "ESTONIA", "Estonia",
+  "TONGA", "Tonga",
+  "RWANDA", "Rwanda",
+  "MONGOLIA", "Mongolia",
+  "MALAWI", "Malawi",
+  "FINLAND", "Finland",
+  "MOZAMBIQUE", "Mozambique",
+  "ESWATINI", "eSwatini",
+  "SURINAME", "Suriname",
+  "CAPE VERDE", "Cape Verde",
+  "GABON", "Gabon",
+  "DOMINICA", "Dominica",
+  "MONTENEGRO", "Montenegro",
+  "LIBYA", "Libya",
+  "TURKMENISTAN", "Turkmenistan",
+  "SINGAPORE", "Singapore",
+  "PAPUA NEW GUINEA", "Papua New Guinea",
+  "BOTSWANA", "Botswana",
+  "BAHRAIN", "Bahrain",
+  "UNITED ARAB EMIRATES", "United Arab Emirates",
+  "SLOVENIA", "Slovenia",
+  "MALTA", "Malta",
+  "NAMIBIA", "Namibia",
+  "MAURITIUS", "Mauritius",
+  "DJIBOUTI", "Djibouti",
+  "SAO TOME AND PRINCIPE", "São Tomé and Principe",
+  "LUXEMBOURG", "Luxembourg",
+  "ICELAND", "Iceland",
+  "CYPRUS", "Cyprus",
+  "QATAR", "Qatar",
+  "CENTRAL AFRICAN REPUBLIC", "Central African Rep.",
+  "HONG KONG", "Hong Kong"
+)
+
+citizenship_counts <- deportations %>%
+  filter(!is.na(`Citizenship Country`)) %>%
+  dplyr::count(`Citizenship Country`, name = "deportations") %>%
+  dplyr::rename(country = `Citizenship Country`) %>%
+  mutate(country = str_trim(country)) %>%
+  left_join(country_fix, by = "country") %>%
+  mutate(country = coalesce(ne_name, country)) %>%
+  select(-ne_name)
+
+world_sf <- ne_countries(scale = "medium", returnclass = "sf") %>%
+  st_transform(4326)
+
+world_joined <- world_sf %>%
+  left_join(citizenship_counts, by = c("name" = "country")) %>%
+  mutate(deportations = replace_na(deportations, 0))
+
+# Create palette for non-Mexico countries
+non_mexico_deportations <- world_joined$deportations[world_joined$name != "Mexico" & world_joined$deportations > 0]
+
+pal_world <- colorQuantile(
+  palette = colorRamp(c("#ffcccc", "#ff6666", "#cc0000")),
+  domain = non_mexico_deportations,
+  n = 7,  # number of color bins
+  na.color = "#f0f0f0"
+)
+
+# Custom color function: Mexico gets special color, others use palette
+color_function <- function(name, deportations) {
+  if (name == "Mexico") {
+    return("#990000")  
+  } else if (deportations > 0) {
+    return(pal_world(deportations))
+  } else {
+    return("#f0f0f0")
+  }
+}
+
+# Apply colors to all polygons
+world_joined$fill_color <- mapply(color_function, world_joined$name, world_joined$deportations)
+
+leaflet(world_joined, options = leafletOptions(
+  worldCopyJump = FALSE,
+  maxBoundsViscosity = 1.0
+)) %>%
+  addTiles(
+    urlTemplate = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    options = tileOptions(
+      noWrap = FALSE,
+      bounds = NULL,
+      minZoom = 1,
+      maxZoom = 12
+    )
+  ) %>%
+  addPolygons(
+    fillColor = ~fill_color,
+    weight = 0.3,
+    color = "#444",
+    fillOpacity = 0.85,
+    highlightOptions = highlightOptions(
+      weight = 1.5,
+      color = "#222",
+      fillOpacity = 1,
+      bringToFront = TRUE
+    ),
+    label = ~paste0(
+      "<strong>", name, "</strong><br/>",
+      "Deportations: ", formatC(deportations, format = "d", big.mark = ",")
+    ) %>% lapply(htmltools::HTML)
+  ) %>%
+  setMaxBounds(lng1 = -180, lat1 = -90, lng2 = 180, lat2 = 90) %>% 
+  
+  setView(lng = -98.5795, lat = 39.8283, zoom = 4) 
+```
+
+```{r}
+# Top 10 nationalities
+nationality_top10 <- deportations %>%
+  filter(!is.na(`Citizenship Country`)) %>%
+  dplyr::count(`Citizenship Country`, sort = TRUE) %>%
+  slice_head(n = 10) %>%
+  mutate(`Citizenship Country` = fct_reorder(`Citizenship Country`, n))
+
+ggplot(nationality_top10, aes(x = n, y = `Citizenship Country`, fill = `Citizenship Country`)) +
+  geom_col(width = 0.7) +
+  geom_text(
+    aes(label = scales::comma(n)),
+    hjust = -0.1,
+    size = 3.5
+  ) +
+  scale_x_continuous(
+    labels = scales::comma,
+    expand = expansion(mult = c(0, 0.15))
+  ) +
+  scale_fill_viridis_d(option = "viridis") +
+  labs(
+    title = "Top 10 Nationalities Among Deportees",
+    x = "Number of Deportations",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "none",
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+```
+

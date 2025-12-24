@@ -1,0 +1,190 @@
+---
+title: "A Stochastic Analysis of Palantir Technologies (PLTR) Stocks"
+---
+
+## Executive Summary
+
+### Key Findings
+
+---
+
+## Introduction & Context
+### Purpose of Analysis
+The goal of this study is to **evaluate the stochastic properties of Palantir stock since its IPO**. Specifically, we aim to:
+
+- Characterize the long-run behavior of prices and returns.
+- Assess whether past price movements contain exploitable patterns.
+- Determine suitability of common financial time series models (random walk, ARIMA, volatility models).
+- Produce business relevant insights for investors, analysts, and risk managers.
+
+### Data Description
+Palantir *(NYSE: PLTR)* IPO’d on 2020-09-30. Data is retrieved from Yahoo Finance via tidyquant R package, which includes:
+- Date
+- Open/High/Low/Close
+- Adjusted close (split/dividend adjusted)
+- Volume
+- Adjusted close is used for return computation and modeling.
+
+```{r, warning=FALSE, message=FALSE}
+library(tidyquant)
+library(tidyverse)
+library(tsibble)
+library(forecast)
+library(tseries)
+library(lubridate)
+library(pander)
+
+pltr_prices <- tq_get("PLTR",
+                      get = "stock.prices",
+                      from = "2020-09-30",
+                      to = Sys.Date())
+
+pltr_ts <- pltr_prices %>%
+  select(date, adjusted) %>%
+  as_tsibble(index = date)
+```
+
+---
+
+## Exploratory Data Analysis
+### Price Dynamics
+```{r}
+ggplot(pltr_prices, aes(date, adjusted)) +
+  geom_line(color = "steelblue") +
+  labs(title = "PLTR Adjusted Closing Price",
+       x = "Date", y = "Price (USD)") +
+  theme_minimal()
+```
+
+**Observations**
+**Overall Trend**:
+- The time series shows a long period of post IPO volatility followed by consolidation through 2021–2022. The most pronounced upward movement happens in 2023–2024, when the stock enters a strong, sustained growth phase.
+
+**Volatility**:
+- The series displays substantial short term fluctuations, characteristic of technology equity. Volatility increases during major market events and around earnings periods.
+
+**Structural Change**:
+- A clear structural break becomes visible starting in early 2023, marking the transition from a relatively flat price regime into a high growth period. This shift is consistent with Palantir’s increased AI driven commercial adoption and renewed investor sentiment.
+
+**Noisy Short Run Behavior**:
+- Despite the clear long term upward movement, day to day price behavior remains highly erratic, indicating that short run dynamics continue to be driven by information shocks and speculative trading.
+
+---
+
+##Return Computation & Statistical Properties
+### Daily Log Returns
+```{r}
+pltr_returns <- pltr_prices %>%
+  arrange(date) %>%
+  mutate(log_return = log(adjusted / lag(adjusted))) %>%
+  drop_na()
+
+ggplot(pltr_returns, aes(date, log_return)) +
+  geom_line(color = "firebrick") +
+  labs(title = "Daily Log Returns of PLTR",
+       x = "Date", y = "Log Return") +
+  theme_minimal()
+```
+
+---
+
+## Stationarity Analysis
+### Price Series Stationarity Test
+```{r}
+adf.test(pltr_ts$adjusted) %>% pander()
+```
+**Result**: Fails to reject nonstationarity.
+This reinforces that we need to work with returns, not prices.
+
+## Return Series Stationarity Test
+```{r, warning=FALSE}
+adf.test(pltr_returns$log_return) %>% pander()
+```
+
+**Result**: Significant -> returns are stationary.
+
+*This is a prerequisite for stochastic modeling*
+
+---
+
+##Time Series Decomposition
+Because returns lack seasonality, we decompose the price series instead.
+
+### STL Decomposition
+```{r}
+pltr_ts_vec <- ts(pltr_ts$adjusted,
+                  frequency = 365)
+
+stl_fit <- stl(pltr_ts_vec, s.window = "periodic")
+
+autoplot(stl_fit) +
+  labs(title = "STL Decomposition of PLTR Adjusted Prices")
+```
+
+**Interpretation**
+- **Trend**: The trend component captures the long term structural movements of PLTR. The most significant upswing happens in 2023–2024, where the stock shows strong AI-driven growth. Earlier periods (2020–2021) show only the initial post IPO rise followed by a major correction. The trend clearly illustrates PLTR’s transition from early volatility into a strong sustained growth phase around 2023–2024.
+- **Seasonal**: While the STL decomposition produces an apparent seasonal pattern, **this should not be interpreted as true economic seasonality**. Daily equity prices do not follow a repeating annual cycle; instead, STL imposes a seasonal component by construction. The strong appearance of seasonality is due to the interaction of **non-linear price trends**, **volatility bursts**, and the **forced yearly frequency of STL**.
+- **Remainder**: The irregular component remains large and volatile, consistent with the stochastic nature of equity returns. Most short-term variation cannot be explained by trend or artificial seasonality.
+
+---
+
+##Autocorrelation Analysis
+###ACF and PACF of Log Returns
+```{r}
+acf(pltr_returns$log_return, main = "ACF of PLTR Daily Log Returns")
+pacf(pltr_returns$log_return, main = "PACF of PLTR Daily Log Returns")
+```
+
+**Interpretation**
+While the PACF of daily PLTR returns shows a faint sinusoidal pattern, the magnitudes of the correlations remain very small. This suggests weak cyclical behavior, possibly due to day-of-week or reporting effects, but returns are overall uncorrelated and essentially unpredictable in the short term. Investors cannot reliably exploit these minor patterns for trading.
+
+---
+
+## Volatility Behavior
+Even when returns themselves lack autocorrelation, the squared returns often do not.
+
+### Autocorrelation of Squared Returns
+```{r}
+acf(pltr_returns$log_return^2,
+    main = "ACF of Squared Returns (Volatility Clustering Check)")
+```
+
+**Interpretation**
+The ACF of squared PLTR returns shows only minor deviations from zero, barely exceeding the significance bounds. This indicates that volatility clustering is weak, and most short term variations in returns are essentially unpredictable. While GARCH type models could be applied, their added value in forecasting daily volatility is limited in this case.
+
+---
+
+##Stochastic Model Interpretation
+**Return Dynamics**:
+PLTR daily log returns are approximately white noise being uncorrelated, roughly stationary, and unpredictable on a day-to-day basis.
+
+**Price Dynamics**:
+The nonstationary adjusted prices can be described as a random walk with drift:
+
+$$
+P_t = P_{t-1}*e^{\mu+\epsilon_t}
+$$
+where $\mu$ is the mean daily return (near zero) and $\epsilon_t$ captures stochastic shocks.
+
+**Volatility Considerations**:
+While clustering is weak at the daily level, conditional volatility models could be applied for risk management over longer horizons, though their practical impact is limited for PLTR in this period.
+
+---
+
+## Business Implications
+**Return Predictability**: Short term returns are effectively unpredictable; yesterday’s performance gives little information about tomorrow’s.
+
+**Risk Focus**: Investors should emphasize portfolio diversification and risk management, rather than attempting to time PLTR trades based on past returns.
+
+**Volatility Monitoring**: Even weak autocorrelation in squared returns implies that extreme events or shocks may occur sporadically; monitoring news and market conditions is important.
+
+**Strategic Insight**: PLTR’s price behavior reflects typical growth equity dynamics, strong long term trend punctuated by stochastic day to day variation. Stakeholders should prioritize long term trend understanding over daily movement prediction.
+
+---
+
+## Conclusions
+
+- PLTR returns exhibit minimal autocorrelation and weak volatility clustering, consistent with efficient market behavior.
+- STL decomposition confirms that trend dominates, while irregular shocks account for most daily fluctuations.
+- Random walk modeling captures the stochastic nature of prices, and short-term forecasting of returns is unreliable.
+- Risk management, diversification, and understanding of macro/sectoral factors are far more important than daily return prediction.

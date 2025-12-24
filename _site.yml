@@ -1,20 +1,37 @@
 name: "Ethan Saline Portfolio"
 output_dir: "docs"
-
 navbar:
   title: "<span style='font-family: Arial Black, Impact, sans-serif;
                      font-weight: 600;
                      font-size: 32px;'>
           Ethan Saline's Portfolio
         </span>"
-
   left:
-
     - text: "Machine Learning"
       menu:
         - text: "Lung X-Ray CNN"
           href: lung_cnn.html
-
+    - text: "Statistical Analysis"
+      menu:
+        - text: "Logistic Regression: Heart Failure"
+          href: logistic_regression.html
+    - text: "Bioinformatics"
+      menu:
+        - text: "Covid Transcriptomics"
+          href: covid.html
+          
+    - text: "Storytelling"
+      menu:
+        - text: "Covid Transcriptomics"
+          href: ICE.html
+    - text: "Time Series"
+      menu:
+        - text: "Influenza Decomposition"
+          href: flu.html
+        - text: "Credit Card Loans Decomposition"
+          href: credit_cards.html
+        - text: "Palantir Stock Stocastic Analysis"
+          href: palantir.html
 output:
   html_document:
     theme: cerulean
@@ -22,5 +39,12 @@ output:
     css: styles.css
     include:
       in_header: header.html
-      
+    self_contained: false
+    lib_dir: docs/site_libs
+
+# Copy proj_files folder to docs directory
+resource_files:
+  - "proj_files/**"
+    
+# Render the site using the below:
 # rmarkdown::render_site()

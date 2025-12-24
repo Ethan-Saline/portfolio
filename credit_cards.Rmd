@@ -1,0 +1,338 @@
+---
+title: "Decomposing Consumer Loans"
+---
+
+## Introduction
+
+```{r, warning=FALSE, message=FALSE}
+# Load packages
+
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(tidyverse, 
+               tsibble, 
+               fable, 
+               fabletools, 
+               feasts, 
+               lubridate, 
+               rio,
+               ggplot2, 
+               scales, 
+               zoo, 
+               patchwork, 
+               kableExtra, 
+               pander,
+               scales)
+```
+
+Credit card balances are more than just numbers on a statement. They reflect how households borrow, spend, and respond to the economy. Understanding these patterns can give economists and financial institutions a window into consumer behavior, risk exposure, and overall economic health.
+
+##
+
+We will be breaking down the trends in credit card debt over time using a method called Holt–Winters decomposition. Don’t worry about the math, we’ll focus on what it tells us:
+
+- **The underlying trend**
+- **Seasonal patterns**
+- **Unexpected shifts**
+
+By separating these elements, we gain a clearer view of both historical dynamics and future expectations, helping banks manage risk and economists make more informed forecasts. In short, we turn complex data into actionable insights.
+
+## The Data
+
+```{r, warning=FALSE, message=FALSE}
+# Import data from FRED
+
+cc_df <- read_csv(
+  "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CCLACBW027NBOG",
+  show_col_types = FALSE
+)
+```
+
+```{r, warning=FALSE, message=FALSE}
+# Clean and convert to tsibble
+cc_ts <- cc_df %>%
+  mutate(Date = as.Date(observation_date, format = "%m/%d/%Y"),
+         Balance = CCLACBW027NBOG) %>%
+  as_tsibble(index = Date) %>%
+  select(Date, Balance)
+
+cc_monthly <- cc_ts %>%
+  index_by(Month = ~ yearmonth(.)) %>%
+  summarise(Balance = mean(Balance, na.rm = TRUE))
+```
+
+```{r, warning=FALSE, message=FALSE}
+#| fig-width: 8
+#| fig-height: 5
+#| fig-align: center
+
+autoplot(cc_monthly, Balance) +
+  geom_vline(xintercept = as.numeric(as.Date("2010-04-01")), 
+             color = "red", linetype = "dashed", size = 1) +
+  annotate("text", x = as.Date("2010-01-01"), y = max(cc_monthly$Balance, na.rm = TRUE),
+           label = "Recovery from 2008 Crisis", angle = 90, vjust = -0.5, hjust = 1.1, color = "red") +
+  labs(
+    title = "Monthly Credit Card Loan Balances",
+    subtitle = "Trend in U.S. Credit Card Balances Over Time",
+    x = "Date",
+    y = "Balance (Billions USD)",
+    caption = "Source: FRED (CCLACBW027NBOG) | Vertical line: April 2010"
+  ) +
+  theme_minimal()
+```
+##
+
+**Why Credit Card Debt Jumped in 2010**
+
+Following the 2008–2009 financial crisis, credit tightened and households reduced borrowing. By 2010, as the economy began to recover:
+
+- Banks eased credit limits and promoted new cards.
+- Pent-up demand from the recession fueled higher balances.
+
+**Result**: A noticeable rebound in credit card debt
+
+## Holt–Winters decomposition
+### Explanation
+Before we use this model lets take a look at how it works:
+
+The **Holt–Winters additive model** takes the **level**, **trend**, and **seasonality** and updates them recursively over time.
+
+Essentially saying that we take the level the series is at, then continuing with the slope at that point onwards, adding the seasonality ontop so that it fluctuates the same into the future as it did in the past
+
+##
+To start off here is the equation for the current point at time $t$
+$$
+x_t = a_{t-1} + b_{t-1} + s_{t-p} + \varepsilon_t
+$$
+
+Where:  
+- $a_t$ = level (baseline value of the series)  
+- $b_t$ = trend (slope or rate of change)  
+- $s_t$ = seasonal component  
+- $p$ = number of seasons per year (e.g., 12 for monthly data)  
+- $\varepsilon_t$ = random error term (this is the effect of unpredictable things)
+
+The components are updated each period using **smoothing parameters** $$\alpha, \beta, \gamma \in [0, 1] $$:
+##
+
+**Level equation:**
+$$
+a_t = \alpha (x_t - s_{t-p}) + (1 - \alpha)(a_{t-1} + b_{t-1})
+$$
+
+The closer $\alpha$ is to 1, the faster the forecast will update to new changes in the data, giving more weight to the most recent observations
+
+The smaller $\alpha$ the more it places emphasis on past values, producing a smoother but slower adapting forecast
+
+##
+**Trend equation:**
+$$
+b_t = \beta (a_t - a_{t-1}) + (1 - \beta)b_{t-1}
+$$
+
+The closer $\beta$ is to 1, the more rapidly the estimated trend responds to recent changes in the data  
+A smaller $\beta$ makes the trend component smoother and less sensitive to short-term fluctuations
+
+
+
+##
+**Seasonal equation:**
+$$
+s_t = \gamma (x_t - a_t) + (1 - \gamma)s_{t-p}
+$$
+
+The closer $\gamma$ is to 1, the stronger the model adjusts the seasonal component to recent seasonal changes
+
+A smaller $\gamma$ assumes the seasonal pattern is stable over time and updates it more slowly.
+
+##
+Finally, the **forecast equation** for $k$ periods into the future at last known time = $n$ is:
+
+$$
+\hat{x}_{n+k} = a_n + kb_n + s_{n-p+k}
+$$
+
+##
+
+**Interpretation**
+
+- $\alpha$ : controls how quickly the model reacts to recent changes in the level  
+- $\beta$ : controls how quickly the trend adapts  
+- $\gamma$ : controls how much the model adjusts for seasonal changes  
+
+Together, these parameters determine how smooth or reactive the model is in tracking inflation dynamics.
+
+## 
+
+**Note on Operators**
+
+$$
+\hat{x}_{n+k} = a_n + kb_n + s_{n-p+k}
+$$
+This is the **Additive Model**, which is used when we believe the seasonal fluctuations remain **roughly constant in magnitude** over time
+In other words, the amount of seasonal variation does not depend on the overall level of the series (prices rise and fall by similar *absolute* amounts each year)
+
+##
+
+However this is not always the case and we have the **Multiplicative Model** for such cases. 
+
+$$
+\hat{x}_{n+k} = a_n * kb_n * s_{n-p+k}
+$$
+
+This model is appropriate when seasonal effects **grow or shrink proportionally** with the level of the series
+In this case, higher overall price levels are associated with **larger seasonal swings**, and lower levels with smaller ones **meaning the seasonality scales with the data**
+
+## Our Holt-Winters
+
+```{r, warning=FALSE, message=FALSE}
+library(tsibble)
+library(fabletools)
+library(fable)
+library(feasts)
+
+# HW Decomposition
+cc_hw <- cc_monthly %>%
+  fabletools::model(hw = fable::ETS(Balance ~ error("A") + 
+                   trend("A", alpha = 0.9, beta = 0.0002) + 
+                   season("A", gamma = 0.002)))
+
+report(cc_hw) %>% pander()
+```
+
+```{r}
+components_cc <- cc_hw %>%
+  components() %>%
+  as_tibble()
+
+# Residuals from Holt–Winters decomposition
+hw_resid_cc <- na.omit(components_cc$remainder)
+```
+
+For our model we have chosen:
+
+- $\alpha = 0.9$ 
+- $\beta = 0.002$
+- $\gamma = 0.002$
+
+##
+
+```{r, warning=FALSE, message=FALSE}
+# Plot decomposition
+components_cc %>%
+  pivot_longer(
+    cols = c("level", "slope", "season", "remainder"),
+    names_to = "Component",
+    values_to = "Value"
+  ) %>%
+  ggplot(aes(x = Month, y = Value)) +   # use Month instead of Date
+  geom_line(color = "#0072B2", size = 0.9) +
+  facet_wrap(~ Component, scales = "free_y", ncol = 1) +
+  labs(
+    title = "Holt–Winters Decomposition of Credit Card Loan Balances",
+    subtitle = "Additive Model — Level, Slope, Seasonal, and Remainder Components",
+    x = "Year",
+    y = "",
+    caption = "Source: FRED (CCLACBW027NBOG)"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+## Together With the Time Series
+
+```{r, warning=FALSE, message=FALSE}
+# Actual vs Fitted
+cc_fitted <- augment(cc_hw) %>%
+  as_tibble() %>%
+  select(Month, Balance, Fitted = .fitted)
+
+cc_long <- cc_fitted %>%
+  select(Month, Balance, Fitted) %>%
+  pivot_longer(cols = c(Balance, Fitted), 
+               names_to = "Type", 
+               values_to = "Value")
+
+ggplot(cc_long, aes(x = as.Date(Month), y = Value, color = Type)) +
+  geom_line(size = 1) +
+  scale_color_manual(values = c("Balance" = "red", "Fitted" = "skyblue")) +
+  labs(title = "Actual vs. Holt–Winters Smoothed Credit Card Balances",
+       x = "Year", 
+       y = "Balance (Billions USD)", 
+       color = "",
+       caption = "Source: FRED (CCLACBW027SBOG)") +
+  theme_minimal(base_size = 13)
+```
+
+## Diagnostics
+
+```{r, warning=FALSE, message=FALSE}
+# Autocorrelation of residuals
+acf(hw_resid_cc, main = "ACF of Holt–Winters Residuals (Credit Card Balances)")
+```
+
+##
+
+After decomposing the credit card balances into level, trend, and seasonality, we look at the residuals (the portion of the data that our model couldn’t explain). The ACF chart helps us check if there’s any remaining pattern in these residuals.
+
+## Key points for the chart:
+
+- The first bar will always be at 1
+- Each bar represents how strongly the residuals at one month are correlated with residuals at previous months (lags).
+- Small, random bars around zero mean our model captured the main patterns well—there’s no leftover predictable structure.
+- Large spikes at certain lags indicate the model missed something—for example, repeating patterns not captured by the trend or seasonality.
+
+## Contextual takeaway for credit card balances:
+
+- If the residuals show little autocorrelation, it suggests the Holt–Winters decomposition successfully explained the seasonal and long-term movements in credit card debt.
+- If we see a spike every 12 months, that might hint at a seasonal effect that wasn’t fully captured, such as spending surges during holidays.
+
+##
+
+**In short**: The ACF chart is like a diagnostic tool—it tells us how well our model understood the behavior of credit card borrowing over time and whether anything systematic is left unexplained.
+
+## Forecasting
+
+```{r, warning=FALSE, message=FALSE}
+# Keep tsibble structure
+cc_aug <- augment(cc_hw)
+cc_aug$Fitted <- cc_aug$.fitted
+
+# Forecast 24 months ahead
+cc_forecast <- cc_hw %>%
+  forecast(h = "24 months")
+
+# Plot
+autoplot(cc_forecast, level = 95) +
+  autolayer(cc_aug, Fitted, color = "red") +
+  labs(
+    title = "Holt–Winters Forecast of Credit Card Loan Balances",
+    subtitle = "24-Week Forecast with 95% Prediction Interval",
+    x = "Year",
+    y = "Balance (Billions USD)",
+    color = ""
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+## Zoomed in
+
+```{r, warning=FALSE, message=FALSE}
+autoplot(cc_forecast, level = 95) +
+  autolayer(cc_aug, Fitted, color = "red") +
+  coord_cartesian(xlim = as.Date(c("2020-01-01", "2027-12-31"))) +
+  labs(
+    title = "Holt–Winters Forecast of Credit Card Loan Balances",
+    subtitle = "24-Week Forecast with 95% Prediction Interval",
+    x = "Year",
+    y = "Balance (Billions USD)",
+    color = ""
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+##
+
+The forecast indicates a continued gradual increase in credit card balances over the next 24 months, with seasonal fluctuations producing predictable peaks and troughs. 
+
+The 95% prediction interval shows the range of possible outcomes, meaning anything within the shaded region is very plausible. 
+
+Assuming the economy maintains its current trajectory, this projection gives us a view of what we can expect for consumer credit in the coming two years.
