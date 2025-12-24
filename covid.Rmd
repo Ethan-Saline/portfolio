@@ -124,7 +124,69 @@ Summary & Reporting
 ### Data Loading & Quality Control
 
 #### Package Installation and Loading
-```{r setup}
+
+```{r}
+# CRAN packages
+cran_pkgs <- c(
+  "tidyverse",
+  "WGCNA",
+  "pheatmap",
+  "Rtsne",
+  "uwot",
+  "ggrepel",
+  "kableExtra",
+  "pander"
+)
+
+# Install CRAN packages if missing
+installed_cran <- rownames(installed.packages())
+for (pkg in cran_pkgs) {
+  if (!pkg %in% installed_cran) {
+    install.packages(pkg, dependencies = TRUE)
+  }
+}
+
+# Bioconductor setup
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+
+# Bioconductor packages
+bioc_pkgs <- c(
+  "limma",
+  "edgeR",
+  "DESeq2"
+)
+
+# Install Bioconductor packages if missing
+for (pkg in bioc_pkgs) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    BiocManager::install(pkg, ask = FALSE, update = FALSE)
+  }
+}
+
+# Load everything explicitly
+library(tidyverse)
+library(limma)
+library(edgeR)
+library(DESeq2)
+library(WGCNA)
+library(pheatmap)
+library(Rtsne)
+library(uwot)
+library(ggrepel)
+library(kableExtra)
+library(pander)
+
+# Fail fast if DESeq2 didn’t attach
+stopifnot("DESeq2" %in% .packages())
+
+```
+
+
+```{r, eval=FALSE}
+# This below is the proper set up for a machine with packages already installed. The above chunk is for github render issues
+
 # Install and load required packages
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load(
