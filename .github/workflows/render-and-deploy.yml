@@ -26,19 +26,25 @@ jobs:
 
       # Install system dependencies for R packages
       - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libcurl4-openssl-dev \
-            libssl-dev \
-            libxml2-dev \
-            libfontconfig1-dev \
-            libharfbuzz-dev \
-            libfribidi-dev \
-            libfreetype6-dev \
-            libpng-dev \
-            libtiff5-dev \
-            libjpeg-dev
+          run: |
+            sudo apt-get update
+            sudo apt-get install -y \
+              libcurl4-openssl-dev \
+              libssl-dev \
+              libxml2-dev \
+              libfontconfig1-dev \
+              libharfbuzz-dev \
+              libfribidi-dev \
+              libfreetype6-dev \
+              libpng-dev \
+              libtiff5-dev \
+              libjpeg-dev \
+              libproj-dev \
+              proj-data \
+              proj-bin \
+              libgdal-dev \
+              libgeos-dev
+
 
       # Setup Miniconda and Python environment
       - name: Setup Miniconda
