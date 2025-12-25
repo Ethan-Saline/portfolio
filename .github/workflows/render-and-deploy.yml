@@ -9,6 +9,11 @@ jobs:
   render-and-deploy:
     runs-on: ubuntu-latest
 
+    env:
+      # Prevent R from sourcing local .Rprofile or renv
+      R_ENVIRON_USER: /dev/null
+      R_PROFILE_USER: /dev/null
+
     steps:
       # 1. Checkout repo
       - name: Checkout repository
@@ -24,7 +29,7 @@ jobs:
       - name: Setup Pandoc
         uses: r-lib/actions/setup-pandoc@v2
 
-      # 4. Install system dependencies for R packages
+      # 4. Install system dependencies
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -51,22 +56,22 @@ jobs:
         run: |
           Rscript -e "install.packages(c(
             'tidyverse', 'pheatmap', 'Rtsne', 'uwot',
-            'ggrepel', 'kableExtra', 'pander', 'rmarkdown', 'yaml','sf'
+            'ggrepel', 'kableExtra', 'pander', 'rmarkdown', 'yaml', 'WGCNA'
           ))"
           Rscript -e "if(!requireNamespace('BiocManager', quietly=TRUE)) install.packages('BiocManager')"
-          Rscript -e "BiocManager::install(c('limma','edgeR','DESeq2','terra','units', 'WGCNA'))"
+          Rscript -e "BiocManager::install(c('limma','edgeR','DESeq2','sf','terra','units'))"
 
       # 6. Render R Markdown site
       - name: Render R Markdown site
         run: Rscript -e "rmarkdown::render_site(encoding='UTF-8')"
 
-      # 7. Debug: list output files
+      # 7. Debug: list rendered files
       - name: List rendered files
         run: |
           echo "Listing files in docs/"
           ls -R docs || echo "docs/ does not exist"
 
-      # 8. Create .nojekyll for GitHub Pages
+      # 8. Create .nojekyll file
       - name: Create .nojekyll file
         run: touch docs/.nojekyll
 
