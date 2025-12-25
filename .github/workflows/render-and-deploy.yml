@@ -51,44 +51,50 @@ jobs:
             libgeos-dev \
             libudunits2-dev
       
-      # 5. Setup R dependencies with caching
-      - name: Setup R dependencies
-        uses: r-lib/actions/setup-r-dependencies@v2
+      # 5. Cache R packages
+      - name: Cache R packages
+        uses: actions/cache@v3
         with:
-          cache-version: 2
-          extra-packages: |
-            any::tidyverse
-            any::pheatmap
-            any::Rtsne
-            any::uwot
-            any::ggrepel
-            any::kableExtra
-            any::pander
-            any::rmarkdown
-            any::yaml
-            any::WGCNA
-            bioc::limma
-            bioc::edgeR
-            bioc::DESeq2
-            any::sf
-            any::terra
-            any::units
+          path: ${{ env.R_LIBS_USER }}
+          key: ${{ runner.os }}-r-4.4.1-${{ hashFiles('.github/workflows/*.yml') }}-v2
+          restore-keys: |
+            ${{ runner.os }}-r-4.4.1-
       
-      # 6. Render R Markdown site
+      # 6. Install R packages
+      - name: Install R packages
+        run: |
+          Rscript -e "
+          pkgs <- c('tidyverse', 'pheatmap', 'Rtsne', 'uwot',
+                    'ggrepel', 'kableExtra', 'pander', 'rmarkdown', 'yaml', 'WGCNA')
+          new_pkgs <- setdiff(pkgs, rownames(installed.packages()))
+          if(length(new_pkgs)) install.packages(new_pkgs, repos='https://cloud.r-project.org/', Ncpus=2)
+          "
+          Rscript -e "
+          if(!requireNamespace('BiocManager', quietly=TRUE)) {
+            install.packages('BiocManager', repos='https://cloud.r-project.org/')
+          }
+          "
+          Rscript -e "
+          bioc_pkgs <- c('limma','edgeR','DESeq2','sf','terra','units')
+          new_bioc <- setdiff(bioc_pkgs, rownames(installed.packages()))
+          if(length(new_bioc)) BiocManager::install(new_bioc, ask=FALSE)
+          "
+      
+      # 7. Render R Markdown site
       - name: Render R Markdown site
         run: Rscript -e "rmarkdown::render_site(encoding='UTF-8')"
       
-      # 7. Debug: list rendered files
+      # 8. Debug: list rendered files
       - name: List rendered files
         run: |
           echo "Listing files in docs/"
           ls -R docs || echo "docs/ does not exist"
       
-      # 8. Create .nojekyll file
+      # 9. Create .nojekyll file
       - name: Create .nojekyll file
         run: touch docs/.nojekyll
       
-      # 9. Deploy to GitHub Pages
+      # 10. Deploy to GitHub Pages
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
