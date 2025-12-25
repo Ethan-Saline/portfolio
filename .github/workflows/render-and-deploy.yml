@@ -25,7 +25,7 @@ jobs:
         uses: r-lib/actions/setup-pandoc@v2
 
       # Install system dependencies for R packages
-      - name: Install system dependencies
+        - name: Install system dependencies
           run: |
             sudo apt-get update
             sudo apt-get install -y \
@@ -44,6 +44,7 @@ jobs:
               proj-bin \
               libgdal-dev \
               libgeos-dev
+
 
 
       # Setup Miniconda and Python environment
