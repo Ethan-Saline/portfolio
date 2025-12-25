@@ -25,27 +25,25 @@ jobs:
         uses: r-lib/actions/setup-pandoc@v2
 
       # Install system dependencies for R packages
-        - name: Install system dependencies
-          run: |
-            sudo apt-get update
-            sudo apt-get install -y \
-              libcurl4-openssl-dev \
-              libssl-dev \
-              libxml2-dev \
-              libfontconfig1-dev \
-              libharfbuzz-dev \
-              libfribidi-dev \
-              libfreetype6-dev \
-              libpng-dev \
-              libtiff5-dev \
-              libjpeg-dev \
-              libproj-dev \
-              proj-data \
-              proj-bin \
-              libgdal-dev \
-              libgeos-dev
-
-
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libcurl4-openssl-dev \
+            libssl-dev \
+            libxml2-dev \
+            libfontconfig1-dev \
+            libharfbuzz-dev \
+            libfribidi-dev \
+            libfreetype6-dev \
+            libpng-dev \
+            libtiff5-dev \
+            libjpeg-dev \
+            libproj-dev \
+            proj-data \
+            proj-bin \
+            libgdal-dev \
+            libgeos-dev
 
       # Setup Miniconda and Python environment
       - name: Setup Miniconda
@@ -64,13 +62,19 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-renv-
 
-      #  Restore R packages
+      # Restore R packages
       - name: Restore renv
-        run: Rscript -e "install.packages('renv'); renv::restore()"
+        run: Rscript -e "install.packages('renv'); renv::restore(prompt = FALSE)"
 
       # Render R Markdown site
       - name: Render R Markdown site
         run: Rscript -e "rmarkdown::render_site(encoding='UTF-8')"
+
+      # Debug: list output files (optional, safe)
+      - name: List rendered files
+        run: |
+          echo "Listing files in docs/"
+          ls -R docs || echo "docs/ does not exist"
 
       # Create .nojekyll for GitHub Pages
       - name: Create .nojekyll file
