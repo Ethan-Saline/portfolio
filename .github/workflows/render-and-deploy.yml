@@ -10,78 +10,67 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout repo
+      # 1. Checkout repo
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Setup R
+      # 2. Setup R
       - name: Setup R
         uses: r-lib/actions/setup-r@v2
         with:
           r-version: '4.4.1'
 
-      # Setup Pandoc
+      # 3. Setup Pandoc
       - name: Setup Pandoc
         uses: r-lib/actions/setup-pandoc@v2
 
-      # Install system dependencies for R packages
+      # 4. Install system dependencies for R packages
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-          libcurl4-openssl-dev \
-          libssl-dev \
-          libxml2-dev \
-          libfontconfig1-dev \
-          libharfbuzz-dev \
-          libfribidi-dev \
-          libfreetype6-dev \
-          libpng-dev \
-          libtiff5-dev \
-          libjpeg-dev \
-          libproj-dev \
-          proj-data \
-          proj-bin \
-          libgdal-dev \
-          libgeos-dev \
-          libudunits2-dev
+            libcurl4-openssl-dev \
+            libssl-dev \
+            libxml2-dev \
+            libfontconfig1-dev \
+            libharfbuzz-dev \
+            libfribidi-dev \
+            libfreetype6-dev \
+            libpng-dev \
+            libtiff5-dev \
+            libjpeg-dev \
+            libproj-dev \
+            proj-data \
+            proj-bin \
+            libgdal-dev \
+            libgeos-dev \
+            libudunits2-dev
 
-      # Setup Miniconda and Python environment
-      - name: Setup Miniconda
-        uses: conda-incubator/setup-miniconda@v2
-        with:
-          activate-environment: r-tf
-          environment-file: environment.yml
-          auto-update-conda: true
+      # 5. Install R packages (CRAN + Bioconductor)
+      - name: Install R packages
+        run: |
+          Rscript -e "install.packages(c(
+            'tidyverse', 'pheatmap', 'Rtsne', 'uwot',
+            'ggrepel', 'kableExtra', 'pander', 'rmarkdown', 'yaml','sf'
+          ))"
+          Rscript -e "if(!requireNamespace('BiocManager', quietly=TRUE)) install.packages('BiocManager')"
+          Rscript -e "BiocManager::install(c('limma','edgeR','DESeq2','terra','units', 'WGCNA'))"
 
-      # Cache R packages from renv
-      - name: Cache renv library
-        uses: actions/cache@v3
-        with:
-          path: renv/library
-          key: ${{ runner.os }}-renv-${{ hashFiles('renv.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-renv-
-
-      # Restore R packages
-      - name: Restore renv
-        run: Rscript -e "install.packages('renv'); renv::restore(prompt = FALSE)"
-
-      # Render R Markdown site
+      # 6. Render R Markdown site
       - name: Render R Markdown site
         run: Rscript -e "rmarkdown::render_site(encoding='UTF-8')"
 
-      # Debug: list output files (optional, safe)
+      # 7. Debug: list output files
       - name: List rendered files
         run: |
           echo "Listing files in docs/"
           ls -R docs || echo "docs/ does not exist"
 
-      # Create .nojekyll for GitHub Pages
+      # 8. Create .nojekyll for GitHub Pages
       - name: Create .nojekyll file
         run: touch docs/.nojekyll
 
-      # Deploy to GitHub Pages
+      # 9. Deploy to GitHub Pages
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
