@@ -8,27 +8,27 @@ on:
 jobs:
   render-and-deploy:
     runs-on: ubuntu-latest
-
     env:
       # Prevent R from sourcing local .Rprofile or renv
       R_ENVIRON_USER: /dev/null
       R_PROFILE_USER: /dev/null
-
+    
     steps:
       # 1. Checkout repo
       - name: Checkout repository
         uses: actions/checkout@v3
-
-      # 2. Setup R
+      
+      # 2. Setup R with RSPM for faster binary packages
       - name: Setup R
         uses: r-lib/actions/setup-r@v2
         with:
           r-version: '4.4.1'
-
+          use-public-rspm: true
+      
       # 3. Setup Pandoc
       - name: Setup Pandoc
         uses: r-lib/actions/setup-pandoc@v2
-
+      
       # 4. Install system dependencies
       - name: Install system dependencies
         run: |
@@ -50,31 +50,44 @@ jobs:
             libgdal-dev \
             libgeos-dev \
             libudunits2-dev
-
-      # 5. Install R packages (CRAN + Bioconductor)
-      - name: Install R packages
-        run: |
-          Rscript -e "install.packages(c(
-            'tidyverse', 'pheatmap', 'Rtsne', 'uwot',
-            'ggrepel', 'kableExtra', 'pander', 'rmarkdown', 'yaml', 'WGCNA'
-          ), repos='https://cloud.r-project.org/')"
-          Rscript -e "if(!requireNamespace('BiocManager', quietly=TRUE)) install.packages('BiocManager', repos='https://cloud.r-project.org/')"
-          Rscript -e "BiocManager::install(c('limma','edgeR','DESeq2','sf','terra','units'))"
-
+      
+      # 5. Setup R dependencies with caching
+      - name: Setup R dependencies
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          cache-version: 2
+          extra-packages: |
+            any::tidyverse
+            any::pheatmap
+            any::Rtsne
+            any::uwot
+            any::ggrepel
+            any::kableExtra
+            any::pander
+            any::rmarkdown
+            any::yaml
+            any::WGCNA
+            bioc::limma
+            bioc::edgeR
+            bioc::DESeq2
+            any::sf
+            any::terra
+            any::units
+      
       # 6. Render R Markdown site
       - name: Render R Markdown site
         run: Rscript -e "rmarkdown::render_site(encoding='UTF-8')"
-
+      
       # 7. Debug: list rendered files
       - name: List rendered files
         run: |
           echo "Listing files in docs/"
           ls -R docs || echo "docs/ does not exist"
-
+      
       # 8. Create .nojekyll file
       - name: Create .nojekyll file
         run: touch docs/.nojekyll
-
+      
       # 9. Deploy to GitHub Pages
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
