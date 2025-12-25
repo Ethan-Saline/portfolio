@@ -126,20 +126,19 @@ Summary & Reporting
 #### Package Installation and Loading
 ```{r, eval=FALSE}
 # Install and load required packages
-if (!require("pacman")) install.packages("pacman")
-pacman::p_load(
-  tidyverse,    # Data manipulation and visualization
-  limma,        # Linear models for microarray/RNA-seq
-  edgeR,        # Differential expression analysis
-  DESeq2,       # Differential expression (negative binomial)
-  WGCNA,        # Weighted gene co-expression network analysis
-  pheatmap,     # Pretty heatmaps
-  Rtsne,        # t-SNE dimensionality reduction
-  uwot,         # UMAP dimensionality reduction
-  ggrepel,      # Non-overlapping text labels
-  kableExtra,   # Enhanced tables
-  pander        # Formatted output
-)
+# Load required packages safely
+library(tidyverse)   # Data manipulation and visualization
+library(limma)       # Linear models for microarray/RNA-seq
+library(edgeR)       # Differential expression analysis
+library(DESeq2)      # Differential expression (negative binomial)
+library(WGCNA)       # Weighted gene co-expression network analysis
+library(pheatmap)    # Pretty heatmaps
+library(Rtsne)       # t-SNE dimensionality reduction
+library(uwot)        # UMAP dimensionality reduction
+library(ggrepel)     # Non-overlapping text labels
+library(kableExtra)  # Enhanced tables
+library(pander)      # Formatted output
+
 ```
 
 #### Import Datasets
