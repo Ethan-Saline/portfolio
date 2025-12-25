@@ -153,10 +153,10 @@ files <- list(
 )
 
 # Load all datasets
-expr_matrix <- read_tsv(file.path(data_dir, files$expr), show_col_types = FALSE)
-sample_info <- read_tsv(file.path(data_dir, files$meta), skip = 1, show_col_types = FALSE)
-gene_annot <- read_tsv(file.path(data_dir, files$annot), show_col_types = FALSE)
-raw_counts <- read_tsv(file.path(data_dir, files$counts), show_col_types = FALSE)
+expr_matrix <- readr::read_tsv(file.path(data_dir, files$expr), show_col_types = FALSE)
+sample_info <- readr::read_tsv(file.path(data_dir, files$meta), skip = 1, show_col_types = FALSE)
+gene_annot <- readr::read_tsv(file.path(data_dir, files$annot), show_col_types = FALSE)
+raw_counts <- readr::read_tsv(file.path(data_dir, files$counts), show_col_types = FALSE)
 
 # Report dimensions
 cat("✓ Datasets successfully loaded\n\n")
